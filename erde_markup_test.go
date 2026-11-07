@@ -501,6 +501,32 @@ func TestErdeMarkupFactoryOption(t *testing.T) {
 	}
 }
 
+// W/o an rpc url, actions POST to the page's own url (as the browser sees it,
+// ex. behind a proxy that strips a prefix).
+func TestErdeMarkupDefaultRPC(t *testing.T) {
+	L := NewState(Options{Erde: erdeMarkupOptions})
+	defer L.Close()
+	source := `local markup = require('erde.markup')
+local live = () -> <b onclick={() -> {}}/>
+local own = markup.document(markup.mount(live, { morph = false }))
+local set = markup.document(markup.mount(live, { rpc = '/actions', morph = false }))
+local ok, err = pcall(markup.mount, live, { rpc = 42 })
+return own, set, tostring(err)`
+	if err := L.DoErdeString(source); err != nil {
+		t.Fatal(err)
+	}
+	own, set, err := L.Get(-3).String(), L.Get(-2).String(), L.Get(-1).String()
+	if !strings.Contains(own, "{ rpc: null,") || !strings.Contains(own, "cfg.rpc ?? location.pathname + location.search") {
+		t.Errorf("w/o rpc:\n%s", own)
+	}
+	if !strings.Contains(set, "{ rpc: '/actions',") {
+		t.Errorf("w/ rpc:\n%s", set)
+	}
+	if !strings.Contains(err, "rpc must be a url") {
+		t.Errorf("bad rpc: %s", err)
+	}
+}
+
 // A mounted page w/o actions is static: no client script.
 func TestErdeMarkupStaticPage(t *testing.T) {
 	L := NewState(Options{Erde: erdeMarkupOptions})

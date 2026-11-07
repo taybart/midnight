@@ -508,8 +508,12 @@ local CLIENT = [[
   let queue = Promise.resolve()
   const morph = (from, to) => {
     if (window.Idiomorph) {
-      // keeps focus, selection, and what's being typed in the focused input
-      Idiomorph.morph(from, to, { ignoreActiveValue: true })
+      // keeps focus, selection, and what's being typed in the focused input.
+      // Only for inputs: idiomorph skips the focused element's children, so
+      // ex. a clicked (focused) button's text would never update.
+      const active = document.activeElement
+      const typing = !!active && active.matches('input, textarea, select, [contenteditable]')
+      Idiomorph.morph(from, to, { ignoreActiveValue: typing })
     } else {
       from.replaceWith(to)
     }
@@ -530,7 +534,7 @@ local CLIENT = [[
     rpc(id, e) {
       const data = summarize(e)
       queue = queue.then(async () => {
-        const res = await fetch(cfg.rpc, {
+        const res = await fetch(cfg.rpc ?? location.pathname + location.search, {
           method: 'POST',
           headers: { ...cfg.headers, 'Content-Type': 'application/json' },
           body: JSON.stringify({ id, data }),
@@ -573,8 +577,9 @@ end
 
 -- mount(root, { rpc, headers, morph }) renders `root()` as the page, and
 -- makes functions in `on*` attributes work: they're registered as actions,
--- and clicking (etc.) POSTs `{ id, data }` (json) to the `rpc` url, which
--- should respond w/ `dispatch(id, data)` (what changed on the page).
+-- and clicking (etc.) POSTs `{ id, data }` (json) to the `rpc` url (or w/o
+-- one, to the page's own url, as the browser sees it), which should respond
+-- w/ `dispatch(id, data)` (what changed on the page).
 -- `headers` are sent along (ex. to find this page's state on the server). A
 -- 410 (gone) response reloads the page. `morph` is how updates are applied:
 -- by default w/ idiomorph (inlined in the page, see `vendoredMorph`), a url
@@ -585,7 +590,7 @@ end
 function M.mount(root, opts)
   opts = opts or {}
   assert(type(root) == 'function', 'markup: mount requires a function')
-  assert(opts.rpc, 'markup: mount requires an rpc url (ex. { rpc = "/actions" })')
+  assert(opts.rpc == nil or type(opts.rpc) == 'string', 'markup: mount: rpc must be a url (a string)')
   local morph = opts.morph
   if morph == nil then
     morph = vendoredMorph()
@@ -740,7 +745,8 @@ function M.document(node)
   for _, key in ipairs(sortedKeys(mounted.headers)) do
     headers[#headers + 1] = jsString(key) .. ': ' .. jsString(mounted.headers[key])
   end
-  local cfg = '{ rpc: ' .. jsString(mounted.rpc) .. ', headers: { ' .. table.concat(headers, ', ') .. ' } }'
+  local rpc = mounted.rpc and jsString(mounted.rpc) or 'null'
+  local cfg = '{ rpc: ' .. rpc .. ', headers: { ' .. table.concat(headers, ', ') .. ' } }'
   local script = '<script>' .. CLIENT:format(cfg) .. '</script>'
   if mounted.morph and mounted.morph.src then
     script = '<script src="' .. escape(mounted.morph.src) .. '"></script>' .. script

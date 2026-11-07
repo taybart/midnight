@@ -198,6 +198,10 @@ document(mount(() -> <App/>, { rpc = '/actions', headers = { ['X-State'] = id } 
 dispatch(body.id, body.data)
 ```
 
+W/o `rpc`, actions POST to the page's own url (`location.pathname +
+location.search`, as the browser sees it), so the host can handle them w/
+the same route as the page, even behind a proxy that rewrites paths.
+
 The host has to run the page and its actions in the same lua state (rest's
 `page` handlers do all of this, see rest's docs). From there:
 
@@ -237,7 +241,7 @@ The host has to run the page and its actions in the same lua state (rest's
 | `state(init)` | state of the component being rendered |
 | `css(rules)` | scoped styles, returns class names |
 | `styles()` | all styles, as a `<style>` (or `''`) |
-| `mount(root, { rpc, headers, morph })` | makes `root()` the interactive page, returns `root()` |
+| `mount(root, { rpc, headers, morph })` | makes `root()` the interactive page (actions POST to `rpc`, or the page's own url), returns `root()` |
 | `dispatch(id, data)` | runs an action, returns `{ headers, body }` (what changed) |
 | `isInteractive()` | whether the last render of the mounted page had actions |
 
