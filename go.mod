@@ -1,4 +1,4 @@
-module github.com/taybart/go-erde
+module github.com/taybart/midnight
 
 go 1.23
 

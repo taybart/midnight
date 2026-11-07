@@ -83,7 +83,7 @@ type FuncCallExpr struct {
 	Args      []Expr
 	AdjustRet bool
 
-	// go-erde: the call is a lowered markup element (for lint)
+	// midnight: the call is a lowered markup element (for lint)
 	Element bool
 }
 
@@ -139,7 +139,7 @@ type FunctionExpr struct {
 	ParList *ParList
 	Stmts   []Stmt
 
-	// go-erde: an erde `=>` function (its first parameter is the implicit
+	// midnight: a midnight `=>` function (its first parameter is the implicit
 	// `self`), for lint
 	FatArrow bool
 }

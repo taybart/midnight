@@ -8,7 +8,7 @@ import __yyfmt__ "fmt"
 //line parser.go.y:2
 
 import (
-	"github.com/taybart/go-erde/ast"
+	"github.com/taybart/midnight/ast"
 )
 
 //line parser.go.y:34

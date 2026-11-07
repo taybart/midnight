@@ -1,0 +1,31 @@
+local
+a=
+0
+for
+i
+=
+1
+,
+3
+do
+for
+j
+=
+1
+,
+4
+do
+a
+=
+a
++
+(
+1
+)
+break
+end
+end
+return
+a
+-- Compiled with Midnight 1.0.0-1 w/ Lua target jit
+-- __MIDNIGHT_COMPILED__

@@ -1,18 +1,18 @@
-# Porting Erde to a Lua runtime
+# Porting Midnight to a Lua runtime
 
-This describes how go-erde added [Erde](https://erde-lang.github.io/) to
+This describes how midnight added [Midnight](https://github.com/taybart/midnight) to
 [gopher-lua](https://github.com/yuin/gopher-lua), as a guide for doing the same
 in other Lua runtimes (C Lua via bindings such as mlua, LuaJIT, Luau, other
 reimplementations).
 
-**The main point: go-erde only added a parser.** Erde is a syntax layer over
-Lua. Every Erde feature can be expressed with ordinary Lua 5.1 constructs (plus
+**The main point: midnight only added a parser.** Midnight is a syntax layer over
+Lua. Every Midnight feature can be expressed with ordinary Lua 5.1 constructs (plus
 `goto`), so a port never needs to touch the runtime's compiler, VM, garbage
-collector, or standard library. go-erde lexes and parses Erde, lowers it to the
+collector, or standard library. midnight lexes and parses Midnight, lowers it to the
 same AST the Lua parser produces, and hands that AST to gopher-lua's unchanged
 compiler.
 
-## What go-erde changed in gopher-lua
+## What midnight changed in gopher-lua
 
 Compared to upstream gopher-lua:
 
@@ -21,23 +21,23 @@ Compared to upstream gopher-lua:
 | **Unchanged** | `vm.go`, `_vm.go`, `opcode.go`, `function.go`, `alloc.go`, the standard libraries (except `table.sort`) | none |
 | | `compile.go`, `parse/parser.go(.y)`, `parse/lexer.go` | import path only |
 | | `ast/expr.go` | import path, and markers for lint (`FunctionExpr.FatArrow`, `FuncCallExpr.Element`), which the compiler ignores |
-| **Hooks** (marked `go-erde`) | `auxlib.go` | `LoadFile` loads `*.erde` w/ the Erde parser, and caches compiled files (see `erde_cache.go`) |
-| | `config.go` | `./?.erde` added to the default `package.path` |
-| | `loadlib.go` | `require` also tries `.erde` for each `.lua` pattern in `package.path` (so a custom `LUA_PATH` finds Erde modules) |
+| **Hooks** (marked `midnight`) | `auxlib.go` | `LoadFile` loads `*.mn` w/ the Midnight parser, and caches compiled files (see `midnight_cache.go`) |
+| | `config.go` | `./?.mn` added to the default `package.path` |
+| | `loadlib.go` | `require` also tries `.mn` for each `.lua` pattern in `package.path` (so a custom `LUA_PATH` finds Midnight modules) |
 | | `linit.go` | open the `bit32` library, and preload the markup runtime |
-| | `state.go`, `_state.go` | `Options.Erde` (experimental extensions for Erde source loaded by the state), and read-only table checks in `setField` / `setFieldString` / `SetMetatable` |
-| | `value.go`, `table.go`, `tablelib.go` | read-only tables (`LTable.readOnly`, checked by the `RawSet*` / `Append` / `Insert` / `Remove` methods and `table.sort`), see `erde_readonly.go` |
-| **New** | `parse/erde_lexer.go`, `parse/erde_parser.go` | the Erde front end (Erde -> AST) |
-| | `erde.go` | `LoadErde`, `LoadErdeString`, `DoErdeString` |
-| | `erde_readonly.go` | `LTable.Freeze` / `FreezeAll`: read-only tables, which states in different goroutines can share (ex. a host's cached data) |
-| | `parse/erde_options.go` | experimental extensions (`match`, `markup`), off by default |
-| | `parse/erde_markup.go`, `erde_markup.go`, `lib/markup.lua`, `lib/idiomorph.lua` | the `markup` experiment and its runtime (see [MARKUP.md](MARKUP.md)) |
-| | `erde_cache.go` | compiled file cache (shared bytecode, keyed by path, mtime, size, and options) |
+| | `state.go`, `_state.go` | `Options.Midnight` (experimental extensions for Midnight source loaded by the state), and read-only table checks in `setField` / `setFieldString` / `SetMetatable` |
+| | `value.go`, `table.go`, `tablelib.go` | read-only tables (`LTable.readOnly`, checked by the `RawSet*` / `Append` / `Insert` / `Remove` methods and `table.sort`), see `midnight_readonly.go` |
+| **New** | `parse/midnight_lexer.go`, `parse/midnight_parser.go` | the Midnight front end (Midnight -> AST) |
+| | `midnight.go` | `LoadMidnight`, `LoadMidnightString`, `DoMidnightString` |
+| | `midnight_readonly.go` | `LTable.Freeze` / `FreezeAll`: read-only tables, which states in different goroutines can share (ex. a host's cached data) |
+| | `parse/midnight_options.go` | experimental extensions (`match`, `markup`), off by default |
+| | `parse/midnight_markup.go`, `midnight_markup.go`, `lib/markup.lua`, `lib/idiomorph.lua` | the `markup` experiment and its runtime (see [MARKUP.md](MARKUP.md)) |
+| | `midnight_cache.go` | compiled file cache (shared bytecode, keyed by path, mtime, size, and options) |
 | | `bit32lib.go` | Lua 5.2's `bit32` (gopher-lua is Lua 5.1, which has no bit operators) |
 | | `luagen/` | AST -> Lua source (optional, see [strategy B](#b-source-to-source)) |
-| | `cmd/erde/` | CLI (from gopher-lua's `glua`), plus `compile` / `clean` / `lint` / `fmt` (see [TOOLS.md](TOOLS.md)) |
-| | `lint/`, `format/` | linter (on the AST) and formatter (on raw tokens, from `parse.ErdeRawTokens`) |
-| | `erde_spec_test.go`, `testdata/erde-spec/`, `_tools/erde-spec/` | differential tests against the reference compiler |
+| | `cmd/midnight/` | CLI (from gopher-lua's `glua`), plus `compile` / `clean` / `lint` / `fmt` (see [TOOLS.md](TOOLS.md)) |
+| | `lint/`, `format/` | linter (on the AST) and formatter (on raw tokens, from `parse.MidnightRawTokens`) |
+| | `midnight_spec_test.go`, `testdata/midnight-spec/`, `_tools/midnight-spec/` | differential tests against the reference compiler |
 
 To check this still holds:
 
@@ -47,30 +47,30 @@ git diff --stat <upstream gopher-lua commit> -- vm.go _vm.go opcode.go compile.g
 
 ## Choosing an integration strategy
 
-How Erde plugs in depends on what the runtime exposes.
+How Midnight plugs in depends on what the runtime exposes.
 
 ### A. AST front end
 
-*What go-erde does.* If the runtime's compiler takes an AST that you can build
+*What midnight does.* If the runtime's compiler takes an AST that you can build
 (typical for Lua implementations written in Go, Rust, Java, JS, ...), write an
-Erde parser that produces that AST.
+Midnight parser that produces that AST.
 
-- Best result: no intermediate Lua text, errors and debug info point at the Erde
-  source directly, Erde and Lua share one compile pipeline.
+- Best result: no intermediate Lua text, errors and debug info point at the Midnight
+  source directly, Midnight and Lua share one compile pipeline.
 - Needs an AST you can construct, and a compiler that accepts it.
 
 ### B. Source to source
 
-If the runtime only accepts Lua source (or bytecode), write an Erde -> Lua
+If the runtime only accepts Lua source (or bytecode), write a Midnight -> Lua
 compiler in the host language and load its output as a normal chunk.
 
 - Works w/ any runtime, including C Lua / LuaJIT / Luau through bindings. For
   example, mlua (Rust) wraps the Lua C API, so there is no AST to target, but
   `Lua::load` accepts source text.
-- Build it as parser -> AST -> printer, like go-erde's `parse.ParseErde` +
+- Build it as parser -> AST -> printer, like midnight's `parse.ParseMidnight` +
   `luagen`. The AST step is what makes the lowering below simple.
 - Keep line numbers aligned: print each statement on its original source line
-  (`luagen` does this), and runtime errors / tracebacks report Erde line
+  (`luagen` does this), and runtime errors / tracebacks report Midnight line
   numbers w/o needing source maps or error rewriting.
 - The printer has extra work an AST front end doesn't (see
   [pitfalls](#pitfalls)), and must account for the target Lua version.
@@ -79,19 +79,19 @@ compiler in the host language and load its output as a normal chunk.
 
 The reference compiler ([erde-lang/erde](https://github.com/erde-lang/erde)) is
 pure Lua. Load it into the runtime and add a `package.searchers` entry (5.2+) or
-`package.loaders` entry (5.1) for `?.erde`.
+`package.loaders` entry (5.1) for `?.mn`.
 
 - Least code, and exact reference behavior.
 - Compilation runs inside the VM on every load (slower startup), and errors
-  refer to the compiled Lua unless you use its error rewriting (see the Erde
+  refer to the compiled Lua unless you use its error rewriting (see the Midnight
   docs, "Error Rewriting").
 
-For a runtime like mlua, C is the quickest way to get Erde running, and B is the
-equivalent of what go-erde does.
+For a runtime like mlua, C is the quickest way to get Midnight running, and B is the
+equivalent of what midnight does.
 
 ## Front end design
 
-go-erde's parser mirrors the reference compiler
+midnight's parser mirrors the reference compiler
 ([`erde/compile.erde`](https://github.com/erde-lang/erde/blob/master/erde/compile.erde)
 and [`erde/tokenize.erde`](https://github.com/erde-lang/erde/blob/master/erde/tokenize.erde))
 function by function: same recursive descent, same lookahead, same error
@@ -109,7 +109,7 @@ reference behavior.
   invalid there). In block strings, other backslashes are literal.
 - **Block strings**: skip a newline directly after the opening `[[` (as Lua
   does), but only there, not after an interpolation.
-- **Numbers**: hex (incl. hex floats) and binary (`0b101`) literals. go-erde
+- **Numbers**: hex (incl. hex floats) and binary (`0b101`) literals. midnight
   converts them to decimal, and strips leading zeros from integers (gopher-lua
   would read `010` as octal).
 - **Shebang** (`#!`) on the first line is skipped.
@@ -127,15 +127,15 @@ reference behavior.
 - **Scopes**: track `local` / `global` / `module` declarations per block, since
   references to `global` / `module` names compile differently.
 - **Keywords**: `not`, `and`, `or`, `end`, `then` are Lua keywords but *not*
-  Erde keywords, so they are valid names.
+  Midnight keywords, so they are valid names.
 
 ### Lowering
 
-Every Erde construct, as the Lua it lowers to. Names like `tmp` are fresh
-temporaries (go-erde uses names that aren't valid identifiers, ex. `(erde 1)`,
+Every Midnight construct, as the Lua it lowers to. Names like `tmp` are fresh
+temporaries (midnight uses names that aren't valid identifiers, ex. `(midnight 1)`,
 so they can never clash w/ user names; a source printer must rename them).
 
-| Erde | Lua |
+| Midnight | Lua |
 | --- | --- |
 | `a != b`, `!a`, `a && b`, `a \|\| b` | `a ~= b`, `not a`, `a and b`, `a or b` |
 | `a // b` | `math.floor(a / b)` (native `//` on 5.3+) |
@@ -160,9 +160,9 @@ so they can never clash w/ user names; a source printer must rename them).
 | `local function f() {}` | `local function f() end` (`f` can refer to itself) |
 | `if`, `for`, `while`, `repeat`, `do`, `goto`, `::label::` | same as Lua, w/ braces |
 
-Experimental (go-erde only, off by default, see the README):
+Experimental (midnight only, off by default, see the README):
 
-| Erde | Lua |
+| Midnight | Lua |
 | --- | --- |
 | `match s { a \| b => { X } _ if g => { Y } _ => { Z } }` | `do local tmp = s if tmp == a or tmp == b then X elseif g then Y else Z end end` |
 
@@ -183,10 +183,10 @@ Errors the parser must raise (the reference compiler does):
 
 ## Pitfalls
 
-Things that came up in go-erde, most of which apply to any port:
+Things that came up in midnight, most of which apply to any port:
 
 - **Parentheses don't exist in the AST.** `(f())` truncates `f`'s results to one
-  value; go-erde marks this on the node (`AdjustRet`). A printer must also add
+  value; midnight marks this on the node (`AdjustRet`). A printer must also add
   parentheses back based on operator precedence, and for non-name prefixes
   (`("abc"):upper()`, `(function() end)()`).
 - **`local f = function` vs `local function f`.** Only the latter can refer to
@@ -195,51 +195,51 @@ Things that came up in go-erde, most of which apply to any port:
   label at the end of a block even past local declarations. In `repeat ...
   until`, the condition follows the label, so locals declared in the body make
   `continue` an error (the reference compiler has the same limitation).
-- **`break` / `return` must be last in a block** in Lua 5.1 source. Erde allows
+- **`break` / `return` must be last in a block** in Lua 5.1 source. Midnight allows
   `break` anywhere; a printer should wrap it (`do break end`).
-- **Lua 5.5 loop variables are read-only.** Erde allows reassigning them; when
+- **Lua 5.5 loop variables are read-only.** Midnight allows reassigning them; when
   generating 5.5 source, bind the loop variable to a temporary and redeclare it
   at the start of the body when the body assigns it.
 - **Keyword names** (`end`, `not`, ...): fine in an AST, but a printer must
   rename locals (`end_`), use `t["end"]` for fields, `_G["end"]` for globals,
   and pass `self` explicitly for methods (`obj["end"](obj)`).
 - **Bit operators depend on the runtime.** 5.1 runtimes need a bit library
-  (go-erde adds `bit32`); 5.3+ have native integer operators (note `bit32`
+  (midnight adds `bit32`); 5.3+ have native integer operators (note `bit32`
   works on unsigned 32-bit values, 5.3+ operators on 64-bit integers).
 - **Line numbers**: set a line on every AST node, so runtime errors point at the
-  right line. Report "unexpected end of input" errors distinctly (go-erde uses
+  right line. Report "unexpected end of input" errors distinctly (midnight uses
   the Lua parser's `EOF` line) so a REPL can tell incomplete input from invalid
   input.
 - **Host quirks**: check the host's number parsing (gopher-lua parses `010` as
   octal) and runtime limits (gopher-lua's default registry size is small for
-  large string concatenations; unrelated to Erde, but the Erde compiler's own
+  large string concatenations; unrelated to Midnight, but the Midnight compiler's own
   sources hit it).
 
 ## Integration checklist
 
-- [ ] Load API for Erde source (strings, readers / files), alongside the Lua one.
-- [ ] Load `*.erde` files w/ the Erde parser.
-- [ ] `require` finds `?.erde` modules (default `package.path`, or a searcher).
-      Erde and Lua modules can then require each other.
-- [ ] CLI: run Erde by default for anything not ending in `.lua` (so pipes and
+- [ ] Load API for Midnight source (strings, readers / files), alongside the Lua one.
+- [ ] Load `*.mn` files w/ the Midnight parser.
+- [ ] `require` finds `?.mn` modules (default `package.path`, or a searcher).
+      Midnight and Lua modules can then require each other.
+- [ ] CLI: run Midnight by default for anything not ending in `.lua` (so pipes and
       `<(...)` work), w/ an option to force the language; read `-` from stdin.
 - [ ] REPL: continue reading lines while the input is incomplete; try
       `return <line>` first so expressions print their values.
 
 ## Verifying a port
 
-go-erde's tests are mostly runtime-agnostic, so reuse them:
+midnight's tests are mostly runtime-agnostic, so reuse them:
 
-- **Spec snippets** (`testdata/erde-spec`): every source the reference
-  compiler's spec suite compiles. `valid/NNNN.erde` comes w/ `NNNN.ref.lua`, the
+- **Spec snippets** (`testdata/midnight-spec`): every source the reference
+  compiler's spec suite compiles. `valid/NNNN.mn` comes w/ `NNNN.ref.lua`, the
   reference compiler's output; run both in your runtime and compare results.
-  `invalid/NNNN.erde` must be rejected (`NNNN.txt` has the reference error).
-  `_tools/erde-spec/update.sh` regenerates them from an erde checkout. The
+  `invalid/NNNN.mn` must be rejected (`NNNN.txt` has the reference error).
+  `_tools/midnight-spec/update.sh` regenerates them from a midnight checkout. The
   reference output targets LuaJIT w/ `bit32` (closest to gopher-lua); change
-  `lua_target` / `bitexpr` in `_tools/erde-spec/compile.lua` for other runtimes.
-- **Self hosting**: the reference compiler is ~3,900 lines of Erde. Load it
+  `lua_target` / `bitexpr` in `_tools/midnight-spec/compile.lua` for other runtimes.
+- **Self hosting**: the reference compiler is ~3,900 lines of Midnight. Load it
   through your front end and have it compile its own sources; the output must be
-  byte-identical to the reference compiler's (`_tools/erde-spec/selfhost.sh`
-  does this w/ go-erde's Lua output).
+  byte-identical to the reference compiler's (`_tools/midnight-spec/selfhost.sh`
+  does this w/ midnight's Lua output).
 - **Round trips** (source to source only): parse the runtime's own Lua test
   suite, print it, and run the printed code.

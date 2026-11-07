@@ -1,0 +1,56 @@
+local
+a=
+{
+b=
+-
+1
+,
+}
+local
+c=
+{
+d=
+-
+1
+,
+['end']=
+function()
+return
+a
+end
+,
+}
+local __MIDNIGHT_TMP_5__,__MIDNIGHT_TMP_6__ =
+6
+,
+7
+c
+.d
+=
+c
+.d
++
+__MIDNIGHT_TMP_5__
+local __MIDNIGHT_TMP_7__ =
+c
+['end'](
+c
+)
+__MIDNIGHT_TMP_7__
+.b
+=
+__MIDNIGHT_TMP_7__
+.b
++
+__MIDNIGHT_TMP_6__
+return
+{
+c
+.d
+,
+a
+.b
+,
+}
+-- Compiled with Midnight 1.0.0-1 w/ Lua target jit
+-- __MIDNIGHT_COMPILED__

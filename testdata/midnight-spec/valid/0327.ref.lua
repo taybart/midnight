@@ -1,0 +1,31 @@
+local
+a=
+{
+}
+for
+i
+,
+value
+in
+ipairs(
+{
+4
+,
+5
+,
+6
+,
+}
+)
+do
+table
+.insert(
+a
+,
+value
+)
+end
+return
+a
+-- Compiled with Midnight 1.0.0-1 w/ Lua target jit
+-- __MIDNIGHT_COMPILED__

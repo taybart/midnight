@@ -1,12 +1,12 @@
 # Markup (`-X markup`)
 
-An experimental extension for writing HTML in erde, JSX style, and a small
-runtime (`erde.markup`) that renders it to HTML: components, scoped styles, and
+An experimental extension for writing HTML in midnight, JSX style, and a small
+runtime (`midnight.markup`) that renders it to HTML: components, scoped styles, and
 (w/ a host that keeps state between requests, like
 [rest](https://github.com/taybart/rest)'s `page` handlers) interactive pages.
 
-```erde
-local { css, state } = require('erde.markup')
+```midnight
+local { css, state } = require('midnight.markup')
 
 local s = css({ counter = { display = 'flex', gap = '.5rem' } })
 
@@ -38,17 +38,17 @@ return () -> <html>
 ## Enabling it
 
 ```sh
-erde -X markup page.erde               # run
-erde compile -X markup .               # compile to lua (runs on any lua, see Portability)
-erde compile -X markup=harmony.h .     # w/ another factory (see below)
+midnight -X markup page.mn               # run
+midnight compile -X markup .               # compile to lua (runs on any lua, see Portability)
+midnight compile -X markup=harmony.h .     # w/ another factory (see below)
 ```
 
 ```go
-L := lua.NewState(lua.Options{Erde: parse.ErdeOptions{Markup: true}})
+L := lua.NewState(lua.Options{Midnight: parse.MidnightOptions{Markup: true}})
 ```
 
 Experiments combine (`-X match,markup`, or `-X match -X markup`). Without `-X
-markup`, `<` is always an operator. `jsx` (`-X jsx`, `require('erde.jsx')`) is
+markup`, `<` is always an operator. `jsx` (`-X jsx`, `require('midnight.jsx')`) is
 the old name, and still works for now.
 
 ## Syntax
@@ -56,7 +56,7 @@ the old name, and still works for now.
 Elements are lowered to calls of `h(tag, props, ...children)`, like JSX's
 classic runtime:
 
-| erde | lua |
+| midnight | lua |
 |---|---|
 | `<div class="card" id={id}>hi {name}</div>` | `h('div', { class = 'card', id = id }, 'hi ', name)` |
 | `<input disabled/>` | `h('input', { disabled = true })` |
@@ -68,7 +68,7 @@ classic runtime:
   are HTML elements (strings). Capitalized and dotted names are components
   (expressions).
 - **Attributes**: names can have `-`, `:`, `.`, and start w/ `@` or `:`
-  (`hx-post`, `@click`, `x-on:click.prevent`). Values are erde strings (so
+  (`hx-post`, `@click`, `x-on:click.prevent`). Values are midnight strings (so
   `class="btn {kind}"` interpolates), `{expressions}`, or nothing (`true`).
   `{...spread}` merges a table (nil is ignored).
 - **Children**: text, `{expressions}`, and elements. Text is cleaned up like
@@ -87,11 +87,11 @@ classic runtime:
 ### The factory
 
 Elements call `h`: whatever `h` is in scope (ex. `local { h } =
-require('erde.markup')`). If there's no `h`, it's imported automatically (once, at
+require('midnight.markup')`). If there's no `h`, it's imported automatically (once, at
 the top of the file, like JSX's automatic runtime), so files w/ elements don't
 need any imports.
 
-`-X markup=name` (`ErdeOptions.MarkupFactory`) uses another function instead, ex.
+`-X markup=name` (`MidnightOptions.MarkupFactory`) uses another function instead, ex.
 `-X markup=harmony.h` or `-X markup=React.createElement`.
 
 ## Rendering
@@ -116,7 +116,7 @@ pages).
 A component is a function from props to an element (or anything renderable).
 `props.children` has its children.
 
-```erde
+```midnight
 local Card = (props) -> <section class="card">
   <h2>{props.title}</h2>
   {props.children}
@@ -135,7 +135,7 @@ inline, as part of the caller.
 instance (ex. across actions on an interactive page). `init` (a table, or a
 function returning one) is only used the first time.
 
-```erde
+```midnight
 local Counter = (props) -> {
   local s = state({ count = props.start || 0 })
   return <button onclick={() -> { s.count += 1 }}>{s.count}</button>
@@ -154,7 +154,7 @@ components that are no longer rendered is dropped.
 `css(rules)` turns lua tables into css, w/ class names generated from a hash of
 the rules, and returns the class names by name:
 
-```erde
+```midnight
 local s = css({
   card = {
     padding = '1rem',
@@ -188,8 +188,8 @@ On a mounted page, functions in `on*` attributes (`onclick`, `onClick`, and
 `on:click` are all `click`) become actions: the event calls the server, which
 runs the function and sends back what changed.
 
-```erde
-local { mount, dispatch, document } = require('erde.markup')
+```midnight
+local { mount, dispatch, document } = require('midnight.markup')
 
 -- the page
 document(mount(() -> <App/>, { rpc = '/actions', headers = { ['X-State'] = id } }))
@@ -211,13 +211,13 @@ The host has to run the page and its actions in the same lua state (rest's
   form doesn't navigate.
 - **Updates**: after an action, the page is rendered again, and only the
   components whose own markup changed are sent (as `<template
-  data-erde-target="id">`, matched to `data-erde` attributes on the page). The
+  data-midnight-target="id">`, matched to `data-midnight` attributes on the page). The
   whole page is sent when something outside of a component changed, when the
   changed component's root is `<html>` / `<head>` / `<body>`, or when there are
   new styles. Nothing changed is an empty response.
 - **Morphing**: updates are applied w/
   [idiomorph](https://github.com/bigskysoftware/idiomorph) (vendored as
-  `erde.markup.idiomorph`, and inlined in the page), so focus, selection, and
+  `midnight.markup.idiomorph`, and inlined in the page), so focus, selection, and
   what's being typed survive. `mount`'s `morph` option can be a url to load it
   from instead, or `false` to replace elements.
 - **Ordering and errors**: actions are sent one at a time, in order. A 410
@@ -227,7 +227,7 @@ The host has to run the page and its actions in the same lua state (rest's
 
 ## Runtime API
 
-`require('erde.markup')`:
+`require('midnight.markup')`:
 
 | | |
 |---|---|
@@ -247,21 +247,21 @@ The host has to run the page and its actions in the same lua state (rest's
 
 ## Portability
 
-Only the syntax is go-erde specific. The runtime is plain lua (5.1 to 5.5,
-LuaJIT), so `erde compile -X markup` output runs anywhere w/ the runtime on
+Only the syntax is midnight specific. The runtime is plain lua (5.1 to 5.5,
+LuaJIT), so `midnight compile -X markup` output runs anywhere w/ the runtime on
 `package.path`:
 
 ```
-erde/markup.lua            -- lib/markup.lua
-erde/markup/idiomorph.lua  -- lib/idiomorph.lua (optional: w/o it, pages load idiomorph from a cdn)
+midnight/markup.lua            -- lib/markup.lua
+midnight/markup/idiomorph.lua  -- lib/idiomorph.lua (optional: w/o it, pages load idiomorph from a cdn)
 ```
 
-go-erde preloads both (and compiles them once per process).
+midnight preloads both (and compiles them once per process).
 
 ## Tooling
 
-- `erde lint -X markup` and `erde fmt -X markup` support it (`fmt` keeps elements as
+- `midnight lint -X markup` and `midnight fmt -X markup` support it (`fmt` keeps elements as
   written).
-- [tree-sitter-erde](https://github.com/taybart/tree-sitter-erde) always parses
+- [tree-sitter-midnight](https://github.com/taybart/tree-sitter-midnight) always parses
   it (w/ highlights, indents, and css / js injected into `<style>` /
   `<script>`).

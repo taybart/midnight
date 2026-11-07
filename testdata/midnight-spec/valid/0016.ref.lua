@@ -1,0 +1,29 @@
+local
+a=
+{
+b=
+0
+,
+}
+local
+c=
+{
+['end']=
+function()
+return
+a
+end
+,
+}
+c
+['end'](
+c
+)
+.b
+=
+4
+return
+a
+.b
+-- Compiled with Midnight 1.0.0-1 w/ Lua target jit
+-- __MIDNIGHT_COMPILED__

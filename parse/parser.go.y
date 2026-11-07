@@ -2,7 +2,7 @@
 package parse
 
 import (
-  "github.com/taybart/go-erde/ast"
+  "github.com/taybart/midnight/ast"
 )
 %}
 %type<stmts> chunk

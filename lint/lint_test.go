@@ -5,12 +5,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/taybart/go-erde/parse"
+	"github.com/taybart/midnight/parse"
 )
 
 func check(t *testing.T, source string, opts Options) []string {
 	t.Helper()
-	chunk, err := parse.ParseErdeWithOptions(strings.NewReader(source), "<string>", parse.ErdeOptions{Match: true})
+	chunk, err := parse.ParseMidnightWithOptions(strings.NewReader(source), "<string>", parse.MidnightOptions{Match: true})
 	if err != nil {
 		t.Fatalf("%s\n%v", source, err)
 	}
@@ -62,7 +62,7 @@ func TestLint(t *testing.T) {
 		{"for i = 1, 2 {\n  if i == 1 { continue }\n  print(i)\n}", nil},
 		{"for i = 1, 2 { continue }", nil}, // continue's label isn't code
 
-		// Erde lowering doesn't leak (temporaries, match, destructuring)
+		// Midnight lowering doesn't leak (temporaries, match, destructuring)
 		{"local s = 'a'\nmatch s { 'a' => { print(s:match('a')) } _ => {} }", nil},
 		{"local f = ({ a } = {}, [b] = {}) -> a + b\nprint(f)", nil},
 		{"local t = { a = { 1 } }\nt.a[1] += 1", nil},
@@ -96,7 +96,7 @@ func TestLintFatArrowComponent(t *testing.T) {
 		{"return () => { return () -> <p/> }", nil}, // the markup is in a nested function
 	}
 	for _, c := range cases {
-		chunk, err := parse.ParseErdeWithOptions(strings.NewReader(c.source), "<string>", parse.ErdeOptions{Markup: true})
+		chunk, err := parse.ParseMidnightWithOptions(strings.NewReader(c.source), "<string>", parse.MidnightOptions{Markup: true})
 		if err != nil {
 			t.Fatalf("%s\n%v", c.source, err)
 		}

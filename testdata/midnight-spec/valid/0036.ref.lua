@@ -1,0 +1,44 @@
+local
+a,b=
+{
+c=
+-
+1
+,
+}
+,
+{
+d=
+-
+1
+,
+}
+local __MIDNIGHT_TMP_4__,__MIDNIGHT_TMP_5__ =
+4
+,
+5
+a
+.c
+=
+a
+.c
++
+__MIDNIGHT_TMP_4__
+b
+.d
+=
+b
+.d
++
+__MIDNIGHT_TMP_5__
+return
+{
+a
+.c
+,
+b
+.d
+,
+}
+-- Compiled with Midnight 1.0.0-1 w/ Lua target jit
+-- __MIDNIGHT_COMPILED__

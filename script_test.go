@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/taybart/go-erde/parse"
+	"github.com/taybart/midnight/parse"
 )
 
 const maxMemory = 40

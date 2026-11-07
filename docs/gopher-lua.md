@@ -1,8 +1,8 @@
 > **Note:** This is the README of [gopher-lua](https://github.com/yuin/gopher-lua),
-> which go-erde is a fork of. The Lua VM and its Go API are unchanged, so it
-> still applies to go-erde (import `github.com/taybart/go-erde` instead of
+> which midnight is a fork of. The Lua VM and its Go API are unchanged, so it
+> still applies to midnight (import `github.com/taybart/midnight` instead of
 > `github.com/yuin/gopher-lua`). The standalone interpreter is now
-> [`cmd/erde`](../cmd/erde).
+> [`cmd/midnight`](../cmd/midnight).
 
 # GopherLua: VM and compiler for Lua in Go.
 
@@ -48,7 +48,7 @@ There are some benchmarks on the [wiki page](https://github.com/yuin/gopher-lua/
 ## Installation
 
 ```bash
-$ go get github.com/taybart/go-erde
+$ go get github.com/taybart/midnight
 ```
 
 ## Usage
@@ -62,7 +62,7 @@ Import a package.
 
 ```go
 import (
-    "github.com/taybart/go-erde"
+    "github.com/taybart/midnight"
 )
 ```
 
@@ -84,9 +84,9 @@ if err := L.DoFile("hello.lua"); err != nil {
 }
 ```
 
-Refer to [Lua Reference Manual](http://www.lua.org/manual/5.1/) and [Go doc](http://pkg.go.dev/github.com/taybart/go-erde) for further information.
+Refer to [Lua Reference Manual](http://www.lua.org/manual/5.1/) and [Go doc](http://pkg.go.dev/github.com/taybart/midnight) for further information.
 
-Note that elements that are not commented in [Go doc](http://pkg.go.dev/github.com/taybart/go-erde) equivalent to [Lua Reference Manual](http://www.lua.org/manual/5.1/) , except GopherLua uses objects instead of Lua stack indices.
+Note that elements that are not commented in [Go doc](http://pkg.go.dev/github.com/taybart/midnight) equivalent to [Lua Reference Manual](http://www.lua.org/manual/5.1/) , except GopherLua uses objects instead of Lua stack indices.
 
 ### Data model
 
@@ -222,7 +222,7 @@ An `LState` object that has been created by `*LState#NewThread()` inherits the c
 
 ### API
 
-Refer to [Lua Reference Manual](http://www.lua.org/manual/5.1/) and [Go doc(LState methods)](http://pkg.go.dev/github.com/taybart/go-erde) for further information.
+Refer to [Lua Reference Manual](http://www.lua.org/manual/5.1/) and [Go doc(LState methods)](http://pkg.go.dev/github.com/taybart/midnight) for further information.
 
 #### Calling Go from Lua
 
@@ -314,7 +314,7 @@ mymodule.go
 package mymodule
 
 import (
-    "github.com/taybart/go-erde"
+    "github.com/taybart/midnight"
 )
 
 func Loader(L *lua.LState) int {
@@ -344,7 +344,7 @@ package main
 
 import (
     "./mymodule"
-    "github.com/taybart/go-erde"
+    "github.com/taybart/midnight"
 )
 
 func main() {
@@ -644,7 +644,7 @@ func main() {
 
 `ToChannel`, `CheckChannel`, `OptChannel` are available.
 
-Refer to [Go doc(LState methods)](http://pkg.go.dev/github.com/taybart/go-erde) for further information.
+Refer to [Go doc(LState methods)](http://pkg.go.dev/github.com/taybart/midnight) for further information.
 
 ##### Lua API
 
@@ -790,7 +790,7 @@ func main() {
 Lua has an interpreter called `lua` . GopherLua has an interpreter called `glua` .
 
 ```bash
-go get github.com/taybart/go-erde/cmd/glua
+go get github.com/taybart/midnight/cmd/glua
 ```
 
 `glua` has same options as `lua` .

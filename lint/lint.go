@@ -1,9 +1,9 @@
-// Package lint checks chunks (from either the Erde or Lua parser) for likely
+// Package lint checks chunks (from either the Midnight or Lua parser) for likely
 // mistakes: undefined / undeclared globals, unused locals, shadowing, and
 // unreachable code.
 //
-// It works on the AST, so it sees Erde after lowering. Names made up by the
-// Erde parser (ex. destructuring / match temporaries) are never reported, and
+// It works on the AST, so it sees Midnight after lowering. Names made up by the
+// Midnight parser (ex. destructuring / match temporaries) are never reported, and
 // `global x` / `module x` names don't need to be declared (they compile to
 // `_G.x` / `_MODULE.x`).
 package lint
@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/taybart/go-erde/ast"
+	"github.com/taybart/midnight/ast"
 )
 
 const (
@@ -41,7 +41,7 @@ type Options struct {
 }
 
 // StandardGlobals are the globals defined by Lua (5.1 - 5.5), LuaJIT, and
-// gopher-lua / go-erde (ex. `bit32`, `channel`).
+// gopher-lua / midnight (ex. `bit32`, `channel`).
 var StandardGlobals = []string{
 	"_G", "_VERSION", "_ENV", "arg", "assert", "bit32", "channel",
 	"collectgarbage", "coroutine", "debug", "dofile", "error", "gcinfo",
@@ -121,8 +121,8 @@ func (c *checker) report(line int, rule, message string) {
 	c.diagnostics = append(c.diagnostics, Diagnostic{Line: line, Rule: rule, Message: message})
 }
 
-// isInternal checks for names made up by the Erde parser (not valid
-// identifiers, ex. `(erde 1)`).
+// isInternal checks for names made up by the Midnight parser (not valid
+// identifiers, ex. `(midnight 1)`).
 func isInternal(name string) bool { return strings.HasPrefix(name, "(") }
 
 // isIgnored checks for names that are intentionally unused (ex. `_`, `_x`).

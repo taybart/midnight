@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/taybart/go-erde/pm"
+	"github.com/taybart/midnight/pm"
 )
 
 const emptyLString LString = LString("")

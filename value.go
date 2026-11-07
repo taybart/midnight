@@ -149,7 +149,7 @@ type LTable struct {
 	keys    []LValue
 	k2i     map[LValue]int
 
-	// go-erde: set by Freeze, see erde_readonly.go
+	// midnight: set by Freeze, see midnight_readonly.go
 	readOnly bool
 }
 

@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/taybart/midnight/parse"
 )
 
 /* load lib {{{ */
@@ -37,10 +39,12 @@ func loFindFile(L *LState, name, pname string) (string, string) {
 	var errs []error // (only made into messages if nothing's found)
 	for _, pattern := range strings.Split(string(path), ";") {
 		candidates := []string{pattern}
-		// go-erde: every `.lua` pattern also finds `.erde` modules (same as the
-		// reference erde searcher), so a custom LUA_PATH still finds them
+		// midnight: every `.lua` pattern also finds `.mn` and `.midnight` modules,
+		// so a custom LUA_PATH still finds them
 		if pname == "path" && strings.HasSuffix(pattern, ".lua") {
-			candidates = append(candidates, strings.TrimSuffix(pattern, ".lua")+".erde")
+			for _, ext := range parse.Extensions {
+				candidates = append(candidates, strings.TrimSuffix(pattern, ".lua")+ext)
+			}
 		}
 		for _, candidate := range candidates {
 			luapath := strings.Replace(candidate, "?", name, -1)

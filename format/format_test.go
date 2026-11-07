@@ -5,14 +5,14 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/taybart/go-erde/parse"
+	"github.com/taybart/midnight/parse"
 )
 
-// Formats every valid spec snippet (see testdata/erde-spec). Format itself
+// Formats every valid spec snippet (see testdata/midnight-spec). Format itself
 // checks the output parses to the same program, so this checks that never
 // fails, and that formatting is idempotent.
 func TestFormatSpecSnippets(t *testing.T) {
-	paths, err := filepath.Glob("../testdata/erde-spec/valid/*.erde")
+	paths, err := filepath.Glob("../testdata/midnight-spec/valid/*.mn")
 	if err != nil || len(paths) == 0 {
 		t.Fatalf("no spec snippets found (%v)", err)
 	}
@@ -112,7 +112,7 @@ func TestFormatStyle(t *testing.T) {
 func TestFormatMatch(t *testing.T) {
 	in := "match x {\n'a'|'b'=>{print(1)}\n_ if x:match('c')=>{\nprint(2)\n}\n}\nmatch(y)"
 	want := "match x {\n  'a' | 'b' => { print(1) }\n  _ if x:match('c') => {\n    print(2)\n  }\n}\nmatch(y)\n"
-	got := testFormat(t, "match", []byte(in), Options{Erde: parse.ErdeOptions{Match: true}})
+	got := testFormat(t, "match", []byte(in), Options{Midnight: parse.MidnightOptions{Match: true}})
 	if got != nil && string(got) != want {
 		t.Errorf("got\n%s\nwant\n%s", got, want)
 	}

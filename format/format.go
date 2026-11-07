@@ -1,6 +1,6 @@
-// Package format formats Erde source.
+// Package format formats Midnight source.
 //
-// The formatter works on tokens (see parse.ErdeRawTokens), not a syntax tree,
+// The formatter works on tokens (see parse.MidnightRawTokens), not a syntax tree,
 // so it keeps the source's line breaks and only normalizes:
 //
 //   - indentation (2 spaces per open bracket, plus one for continuation lines)
@@ -20,18 +20,18 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/taybart/go-erde/parse"
+	"github.com/taybart/midnight/parse"
 )
 
 type Options struct {
-	// Experimental Erde extensions (needed to parse sources that use them).
-	Erde parse.ErdeOptions
+	// Experimental Midnight extensions (needed to parse sources that use them).
+	Midnight parse.MidnightOptions
 }
 
 const indentUnit = "  "
 
 type token struct {
-	parse.ErdeRawToken
+	parse.MidnightRawToken
 	// Whether there was whitespace before this token in the source.
 	spaced bool
 	// Whether this token was added by the formatter (ex. a trailing comma).
@@ -43,7 +43,7 @@ type token struct {
 	column, indent int
 }
 
-// Format formats Erde source. It returns an error if the source doesn't parse,
+// Format formats Midnight source. It returns an error if the source doesn't parse,
 // or if formatting would change the program (a formatter bug).
 func Format(source []byte, opts Options) ([]byte, error) {
 	text := strings.ReplaceAll(string(source), "\r\n", "\n")
@@ -53,14 +53,14 @@ func Format(source []byte, opts Options) ([]byte, error) {
 		return nil, err
 	}
 
-	raw, err := parse.ErdeRawTokensWithOptions(text, "<format>", opts.Erde)
+	raw, err := parse.MidnightRawTokensWithOptions(text, "<format>", opts.Midnight)
 	if err != nil {
 		return nil, err
 	}
 
 	tokens := make([]*token, len(raw))
 	for i, t := range raw {
-		tokens[i] = &token{ErdeRawToken: t, spaced: i == 0 || t.Start > raw[i-1].End}
+		tokens[i] = &token{MidnightRawToken: t, spaced: i == 0 || t.Start > raw[i-1].End}
 		if t.Kind == parse.RawComment {
 			lineStart := strings.LastIndexByte(text[:t.Start], '\n') + 1
 			prefix := text[lineStart:t.Start]
@@ -93,7 +93,7 @@ func Format(source []byte, opts Options) ([]byte, error) {
 }
 
 func dump(text string, opts Options) (string, error) {
-	chunk, err := parse.ParseErdeWithOptions(strings.NewReader(text), "<format>", opts.Erde)
+	chunk, err := parse.ParseMidnightWithOptions(strings.NewReader(text), "<format>", opts.Midnight)
 	if err != nil {
 		return "", err
 	}

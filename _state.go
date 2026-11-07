@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/taybart/go-erde/parse"
+	"github.com/taybart/midnight/parse"
 )
 
 const MultRet = -1
@@ -105,8 +105,8 @@ type Options struct {
 	// If `MinimizeStackMemory` is set, the call stack will be automatically grown or shrank up to a limit of
 	// `CallStackSize` in order to minimize memory usage. This does incur a slight performance penalty.
 	MinimizeStackMemory bool
-	// Experimental Erde extensions, used when loading Erde source.
-	Erde parse.ErdeOptions // go-erde
+	// Experimental Midnight extensions, used when loading Midnight source.
+	Midnight parse.MidnightOptions // midnight
 }
 
 /* }}} */
@@ -1128,7 +1128,7 @@ func (ls *LState) setField(obj LValue, key LValue, value LValue) {
 	curobj := obj
 	for i := 0; i < MaxTableGetLoop; i++ {
 		tb, istable := curobj.(*LTable)
-		if istable && tb.readOnly { // go-erde: read-only tables
+		if istable && tb.readOnly { // midnight: read-only tables
 			ls.RaiseError("attempt to modify a read-only table")
 		}
 		if istable {
@@ -1163,7 +1163,7 @@ func (ls *LState) setFieldString(obj LValue, key string, value LValue) {
 	curobj := obj
 	for i := 0; i < MaxTableGetLoop; i++ {
 		tb, istable := curobj.(*LTable)
-		if istable && tb.readOnly { // go-erde: read-only tables
+		if istable && tb.readOnly { // midnight: read-only tables
 			ls.RaiseError("attempt to modify a read-only table")
 		}
 		if istable {
@@ -1925,7 +1925,7 @@ func (ls *LState) SetMetatable(obj LValue, mt LValue) {
 
 	switch v := obj.(type) {
 	case *LTable:
-		if v.readOnly { // go-erde: read-only tables
+		if v.readOnly { // midnight: read-only tables
 			ls.RaiseError("attempt to modify a read-only table")
 		}
 		v.Metatable = mt

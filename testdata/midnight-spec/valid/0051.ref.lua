@@ -1,0 +1,47 @@
+local
+a=
+{
+b=
+-
+1
+,
+}
+local
+call_counter=
+0
+local
+function
+c
+()
+call_counter
+=
+call_counter
++
+(
+1
+)
+return
+a
+end
+local __MIDNIGHT_TMP_5__ =
+c(
+)
+__MIDNIGHT_TMP_5__
+.b
+=
+__MIDNIGHT_TMP_5__
+.b
++
+(
+2
+)
+return
+{
+call_counter
+,
+a
+.b
+,
+}
+-- Compiled with Midnight 1.0.0-1 w/ Lua target jit
+-- __MIDNIGHT_COMPILED__

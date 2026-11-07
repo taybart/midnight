@@ -1,6 +1,6 @@
 Please answer the following before submitting your issue:
 
-1. What version of go-erde are you using (`erde -v`)? :
+1. What version of midnight are you using (`midnight -v`)? :
 2. What version of Go are you using? :
 3. What operating system and processor architecture are you using? :
 4. What did you do? :

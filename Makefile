@@ -1,10 +1,10 @@
-.PHONY: build test erde
+.PHONY: build test midnight
 
 build:
 	./_tools/go-inline *.go && go fmt . &&  go build
 
-erde: *.go pm/*.go parse/*.go luagen/*.go cmd/erde/main.go
-	./_tools/go-inline *.go && go fmt . && go build ./cmd/erde
+midnight: *.go pm/*.go parse/*.go luagen/*.go cmd/midnight/main.go
+	./_tools/go-inline *.go && go fmt . && go build ./cmd/midnight
 
 test:
 	./_tools/go-inline *.go && go fmt . &&  go test ./...

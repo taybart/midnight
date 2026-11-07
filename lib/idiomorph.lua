@@ -1,4 +1,4 @@
--- erde.jsx.idiomorph: idiomorph 0.8.0, vendored for erde.jsx's client (see
+-- midnight.jsx.idiomorph: idiomorph 0.8.0, vendored for midnight.jsx's client (see
 -- `mount`): https://github.com/bigskysoftware/idiomorph
 --
 -- dist/idiomorph.min.js from https://registry.npmjs.org/idiomorph/-/idiomorph-0.8.0.tgz

@@ -33,11 +33,11 @@ func init() {
 		LuaOS = "unix"
 		LuaLDir = "/usr/local/share/lua/5.1"
 		LuaDirSep = "/"
-		LuaPathDefault = "./?.lua;./?.erde;" + LuaLDir + "/?.lua;" + LuaLDir + "/?/init.lua" // go-erde: ./?.erde
+		LuaPathDefault = "./?.lua;./?.mn;./?.midnight;" + LuaLDir + "/?.lua;" + LuaLDir + "/?/init.lua" // midnight: ./?.mn, ./?.midnight
 	} else { // windows
 		LuaOS = "windows"
 		LuaLDir = "!\\lua"
 		LuaDirSep = "\\"
-		LuaPathDefault = ".\\?.lua;.\\?.erde;" + LuaLDir + "\\?.lua;" + LuaLDir + "\\?\\init.lua" // go-erde: .\?.erde
+		LuaPathDefault = ".\\?.lua;.\\?.mn;.\\?.midnight;" + LuaLDir + "\\?.lua;" + LuaLDir + "\\?\\init.lua" // midnight: .\?.mn, .\?.midnight
 	}
 }

@@ -4,20 +4,20 @@
 
 | Path | What |
 | --- | --- |
-| `parse/erde_lexer.go`, `parse/erde_parser.go` | Erde parser (Erde -> AST) |
+| `parse/midnight_lexer.go`, `parse/midnight_parser.go` | Midnight parser (Midnight -> AST) |
 | `luagen/` | Lua code generator (AST -> Lua) |
-| `erde.go`, `bit32lib.go` | Erde Go API, `bit32` library |
-| `cmd/erde/` | CLI |
+| `midnight.go`, `bit32lib.go` | Midnight Go API, `bit32` library |
+| `cmd/midnight/` | CLI |
 | everything else | gopher-lua (Lua parser, compiler, VM, standard libraries) |
 
 ## Keeping in sync w/ gopher-lua
 
-go-erde should stay mergeable w/ upstream gopher-lua, so:
+midnight should stay mergeable w/ upstream gopher-lua, so:
 
-- Don't change the compiler or VM. Erde features are lowered to the existing AST
+- Don't change the compiler or VM. Midnight features are lowered to the existing AST
   in the parser (see [docs/PORTING.md](../docs/PORTING.md)).
-- Put Erde additions in new files. When an upstream file has to change, keep the
-  change small and mark it w/ a `go-erde` comment.
+- Put Midnight additions in new files. When an upstream file has to change, keep the
+  change small and mark it w/ a `midnight` comment.
 
 To merge upstream changes:
 
@@ -25,7 +25,7 @@ To merge upstream changes:
 git remote add upstream https://github.com/yuin/gopher-lua.git
 git fetch upstream
 git merge upstream/master
-# conflicts should only be import paths (github.com/yuin/gopher-lua -> github.com/taybart/go-erde)
+# conflicts should only be import paths (github.com/yuin/gopher-lua -> github.com/taybart/midnight)
 ```
 
 ## Building
@@ -36,11 +36,11 @@ edit the generated files directly.
 
 ```sh
 make build # regenerate + build
-make erde  # build the CLI
+make midnight  # build the CLI
 make test
 ```
 
 ## Testing
 
-See [Testing](../README.md#testing) in the README. When changing the Erde
-parser, also run `_tools/erde-spec/selfhost.sh <erde checkout>`.
+See [Testing](../README.md#testing) in the README. When changing the Midnight
+parser, also run `_tools/midnight-spec/selfhost.sh <erde-lang/erde checkout>`.

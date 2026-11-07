@@ -1,14 +1,14 @@
--- erde.markup: runtime for go-erde's `markup` experiment (`erde -X markup`).
+-- midnight.markup: runtime for midnight's `markup` experiment (`midnight -X markup`).
 --
 -- Elements are lowered to calls of `h(tag, props, ...children)`:
 --
---   local { h, render } = require('erde.markup')
+--   local { h, render } = require('midnight.markup')
 --   print(render(<p class="greeting">hello {name}!</p>))
 --
 -- `h` builds a tree of nodes, which `render` turns into an HTML string. Text
 -- and attribute values are escaped; use `raw` for trusted HTML.
 --
--- Plain Lua (5.1+), so it also works w/ the output of `erde compile`.
+-- Plain Lua (5.1+), so it also works w/ the output of `midnight compile`.
 
 local M = {}
 
@@ -156,7 +156,7 @@ local current -- { instance, hook } of the component being rendered
 --           -- only changes if the component's own markup does
 --   parent, -- id of the parent component ('r' for the root)
 --   tag,    -- tag of its root element, if it has one (w/ its id in
---           -- `data-erde`, so the client can find it)
+--           -- `data-midnight`, so the client can find it)
 -- }
 local rendered = {}
 -- `rendered` of the last (outermost) render, and the root's shell
@@ -181,7 +181,7 @@ end
 -- slot is the path of the `i`th child of `path`.
 local function slot(path, i, child)
   if getmetatable(child) == Node and child.props.key ~= nil then
-    -- no spaces, ids are space separated in `data-erde`
+    -- no spaces, ids are space separated in `data-midnight`
     return path .. '.k' .. tostring(child.props.key):gsub('%s', '_')
   end
   return path .. '.' .. i
@@ -190,12 +190,12 @@ end
 local renderTo
 
 -- `owners` are the ids of the components whose root is this element (in
--- `data-erde` on mounted pages).
+-- `data-midnight` on mounted pages).
 local function renderElement(buf, node, path, owners)
   local tag, props = node.tag, node.props
   buf[#buf + 1] = '<' .. tag
   if owners and mounted then
-    buf[#buf + 1] = ' data-erde="' .. escape(table.concat(owners, ' ')) .. '"'
+    buf[#buf + 1] = ' data-midnight="' .. escape(table.concat(owners, ' ')) .. '"'
     for _, owner in ipairs(owners) do
       if rendered[owner] then
         rendered[owner].tag = tag
@@ -211,7 +211,7 @@ local function renderElement(buf, node, path, owners)
       frame.nextAction = frame.nextAction + 1
       local id = frame.id .. '#' .. frame.nextAction
       actions[id] = value
-      buf[#buf + 1] = ' on' .. event .. '="erde.rpc(' .. jsString(id) .. ', event)"'
+      buf[#buf + 1] = ' on' .. event .. '="midnight.rpc(' .. jsString(id) .. ', event)"'
     elseif key == 'children' or key == 'key' or value == nil or value == false or type(value) == 'function' then
       -- skipped (functions are event handlers, which only mean something in
       -- the browser, see `mount`)
@@ -492,12 +492,12 @@ function M.styles()
   if #sheets == 0 then
     return ''
   end
-  return '<style data-erde-css>\n' .. table.concat(sheets, '\n') .. '\n</style>'
+  return '<style data-midnight-css>\n' .. table.concat(sheets, '\n') .. '\n</style>'
 end
 
 -- Client side of actions: calls the rpc endpoint w/ the action id and a
 -- summary of the event, then updates the page w/ the response (see
--- `dispatch`): each `<template data-erde-target="id">` replaces the component
+-- `dispatch`): each `<template data-midnight-target="id">` replaces the component
 -- w/ that id, otherwise it's the whole page. Updates are morphed (w/
 -- idiomorph, see `mount`), or swapped if it isn't loaded. Calls are queued, so
 -- they run in order. If the server state is gone (ex. after a restart), or the
@@ -530,7 +530,7 @@ local CLIENT = [[
     }
     return data
   }
-  window.erde = {
+  window.midnight = {
     rpc(id, e) {
       const data = summarize(e)
       queue = queue.then(async () => {
@@ -540,17 +540,17 @@ local CLIENT = [[
           body: JSON.stringify({ id, data }),
         })
         if (res.status === 410) return location.reload()
-        if (!res.ok) throw new Error(`erde.rpc ${id}: ${res.status} ${await res.text()}`)
+        if (!res.ok) throw new Error(`midnight.rpc ${id}: ${res.status} ${await res.text()}`)
         const html = await res.text()
         const page = new DOMParser().parseFromString(html, 'text/html')
-        const fragments = page.querySelectorAll('template[data-erde-target]')
+        const fragments = page.querySelectorAll('template[data-midnight-target]')
         if (fragments.length === 0) {
           if (html.trim() !== '') morph(document.body, page.body)
           return
         }
         for (const fragment of fragments) {
-          const id = CSS.escape(fragment.dataset.erdeTarget)
-          const target = document.querySelector(`[data-erde~="${id}"]`)
+          const id = CSS.escape(fragment.dataset.midnightTarget)
+          const target = document.querySelector(`[data-midnight~="${id}"]`)
           const next = fragment.content.firstElementChild
           if (!target || !next) return location.reload()
           morph(target, next)
@@ -562,12 +562,12 @@ local CLIENT = [[
 ]]
 
 -- idiomorph (https://github.com/bigskysoftware/idiomorph) is vendored as
--- `erde.markup.idiomorph` (go-erde preloads it, elsewhere put it next to this
+-- `midnight.markup.idiomorph` (midnight preloads it, elsewhere put it next to this
 -- file). If it's missing, it's loaded from a cdn instead.
 local MORPH_CDN = 'https://unpkg.com/idiomorph@0.8.0/dist/idiomorph.min.js'
 
 local function vendoredMorph()
-  local ok, source = pcall(require, 'erde.markup.idiomorph')
+  local ok, source = pcall(require, 'midnight.markup.idiomorph')
   if ok and type(source) == 'string' then
     return { inline = source }
   end
@@ -630,7 +630,7 @@ local function forgetHTML()
 end
 
 -- changed returns the components that changed between two renders, as
--- `<template data-erde-target="id">html</template>`s, or nil if the whole
+-- `<template data-midnight-target="id">html</template>`s, or nil if the whole
 -- page has to be sent.
 local function changed(before, after)
   if before.shell ~= after.shell then
@@ -670,7 +670,7 @@ local function changed(before, after)
 
   local out = {}
   for _, id in ipairs(ids) do
-    out[#out + 1] = '<template data-erde-target="' .. escape(id) .. '">' .. after.instances[id].html .. '</template>'
+    out[#out + 1] = '<template data-midnight-target="' .. escape(id) .. '">' .. after.instances[id].html .. '</template>'
   end
   return table.concat(out)
 end

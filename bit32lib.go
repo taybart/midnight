@@ -4,7 +4,7 @@ import (
 	"math"
 )
 
-// Lua 5.2's bit32 library. Erde bit operators (`|`, `~`, `&`, `<<`, `>>`) are
+// Lua 5.2's bit32 library. Midnight bit operators (`|`, `~`, `&`, `<<`, `>>`) are
 // compiled to calls into this library.
 
 // Bit32LibName is the name of the bit32 Library.

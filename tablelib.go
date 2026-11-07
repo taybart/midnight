@@ -21,7 +21,7 @@ var tableFuncs = map[string]LGFunction{
 
 func tableSort(L *LState) int {
 	tbl := L.CheckTable(1)
-	if tbl.readOnly { // go-erde: read-only tables (sort swaps the array in place)
+	if tbl.readOnly { // midnight: read-only tables (sort swaps the array in place)
 		L.RaiseError(errReadOnlyTable)
 	}
 	sorter := lValueArraySorter{L, nil, tbl.array}

@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/taybart/go-erde/ast"
+	"github.com/taybart/midnight/ast"
 )
 
 const EOF = -1

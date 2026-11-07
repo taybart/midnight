@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/taybart/go-erde/luagen"
-	"github.com/taybart/go-erde/parse"
+	"github.com/taybart/midnight/luagen"
+	"github.com/taybart/midnight/parse"
 )
 
 // Runs the Lua test scripts after a round trip through luagen
@@ -57,10 +57,10 @@ func testLuagenScript(t *testing.T, dir, script string) {
 	}
 }
 
-// Runs the Erde eval tests after compiling to Lua (Erde -> AST -> Lua).
-func TestLuagenErde(t *testing.T) {
-	for _, c := range erdeEvalCases {
-		chunk, err := parse.ParseErde(strings.NewReader(c.source), "<string>")
+// Runs the Midnight eval tests after compiling to Lua (Midnight -> AST -> Lua).
+func TestLuagenMidnight(t *testing.T) {
+	for _, c := range midnightEvalCases {
+		chunk, err := parse.ParseMidnight(strings.NewReader(c.source), "<string>")
 		if err != nil {
 			t.Fatalf("%s\n%v", c.source, err)
 		}
