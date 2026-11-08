@@ -28,8 +28,13 @@ local ESCAPES = {
   ['&'] = '&amp;', ['<'] = '&lt;', ['>'] = '&gt;', ['"'] = '&quot;', ["'"] = '&#39;',
 }
 
+local find, gsub = string.find, string.gsub
+
 local function escape(s)
-  return (tostring(s):gsub('[&<>"\']', ESCAPES))
+  if type(s) ~= 'string' then s = tostring(s) end
+  -- most text has nothing to escape: find is cheaper than gsub's copy
+  if not find(s, '[&<>"\']') then return s end
+  return (gsub(s, '[&<>"\']', ESCAPES))
 end
 
 local function isCallable(v)
@@ -91,12 +96,16 @@ function M.map(list, fn)
   return out
 end
 
+local NO_KEYS = {}
+
+-- (callers only read the keys, so tables w/o any share NO_KEYS)
 local function sortedKeys(t)
-  local keys = {}
+  if next(t) == nil then return NO_KEYS end
+  local keys, n = {}, 0
   for key in pairs(t) do
-    if type(key) == 'string' then keys[#keys + 1] = key end
+    if type(key) == 'string' then n = n + 1; keys[n] = key end
   end
-  table.sort(keys)
+  if n > 1 then table.sort(keys) end
   return keys
 end
 
@@ -221,7 +230,9 @@ local function renderElement(buf, node, path, owners)
   end
 
   -- Sorted, so output is deterministic.
-  for _, key in ipairs(sortedKeys(props)) do
+  local keys = sortedKeys(props)
+  for k = 1, #keys do
+    local key = keys[k]
     local value = props[key]
     local event = type(value) == 'function' and P.mounted and eventName(key)
     if event then
@@ -259,8 +270,15 @@ local function renderElement(buf, node, path, owners)
     return
   end
 
-  for i, child in ipairs(node.children) do
-    renderTo(buf, child, RAW_TEXT[tag], slot(path, i, child))
+  -- text is rendered here: it doesn't need a path (only components do)
+  local children, rawText = node.children, RAW_TEXT[tag]
+  for i = 1, #children do
+    local child = children[i]
+    if type(child) == 'string' then
+      buf[#buf + 1] = rawText and child or escape(child)
+    elseif child ~= false and child ~= true then
+      renderTo(buf, child, rawText, slot(path, i, child))
+    end
   end
   buf[#buf + 1] = '</' .. tag .. '>'
 end
@@ -330,7 +348,12 @@ function renderTo(buf, node, rawText, path, owners)
       renderTo(buf, tostring(node), rawText, path)
     else -- list of children (ex. a fragment, or the result of `map`)
       for i = 1, #node do
-        renderTo(buf, node[i], rawText, slot(path, i, node[i]))
+        local child = node[i]
+        if type(child) == 'string' then
+          buf[#buf + 1] = rawText and child or escape(child)
+        elseif child ~= false and child ~= true then
+          renderTo(buf, child, rawText, slot(path, i, child))
+        end
       end
     end
   elseif t == 'function' then -- lazy child

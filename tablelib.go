@@ -2,6 +2,7 @@ package lua
 
 import (
 	"sort"
+	"strings"
 )
 
 func OpenTable(L *LState) int {
@@ -69,19 +70,28 @@ func tableConcat(L *LState) int {
 		L.Push(emptyLString)
 		return 1
 	}
-	//TODO should flushing?
-	retbottom := L.GetTop()
+	// Built in Go, not by pushing every piece on the stack (which overflows
+	// the registry for tables of more than a few thousand pieces, ex. a
+	// rendered page).
+	size := len(sep) * (j - i)
+	for k := i; k <= j; k++ {
+		if s, ok := tbl.RawGetInt(k).(LString); ok {
+			size += len(s)
+		}
+	}
+	var b strings.Builder
+	b.Grow(size)
 	for ; i <= j; i++ {
 		v := tbl.RawGetInt(i)
 		if !LVCanConvToString(v) {
 			L.RaiseError("invalid value (%s) at index %d in table for concat", v.Type().String(), i)
 		}
-		L.Push(v)
+		b.WriteString(LVAsString(v))
 		if i != j {
-			L.Push(sep)
+			b.WriteString(string(sep))
 		}
 	}
-	L.Push(stringConcat(L, L.GetTop()-retbottom, L.reg.Top()-1))
+	L.Push(LString(b.String()))
 	return 1
 }
 

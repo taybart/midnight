@@ -231,3 +231,30 @@ func TestTableForEach(t *testing.T) {
 		}
 	})
 }
+
+func TestTableConcat(t *testing.T) {
+	L := NewState()
+	defer L.Close()
+	err := L.DoString(`
+		assert(table.concat({}) == "")
+		assert(table.concat({"a", "b", "c"}) == "abc")
+		assert(table.concat({"a", "b", "c"}, ", ") == "a, b, c")
+		assert(table.concat({1, 2.5, "x"}, "-") == "1-2.5-x")
+		assert(table.concat({"a", "b", "c", "d"}, "", 2, 3) == "bc")
+		assert(table.concat({"a", "b"}, ",", 3) == "")
+		assert(table.concat({"a", "b"}, ",", 2, 1) == "")
+
+		-- more pieces than the registry holds (it used to overflow)
+		local big = {}
+		for i = 1, 100000 do big[i] = "x" end
+		local s = table.concat(big)
+		assert(#s == 100000)
+		assert(#table.concat(big, ",") == 199999)
+
+		local ok, msg = pcall(table.concat, {"a", {}, "c"})
+		assert(not ok and msg:find("invalid value %(table%) at index 2"))
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
