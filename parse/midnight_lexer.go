@@ -51,9 +51,6 @@ type midnightLexer struct {
 	line   int
 	tokens []midnightToken
 
-	// Whether to lex markup elements (see MidnightOptions.Markup).
-	markup bool
-
 	// Raw tokens (for tooling, see MidnightRawTokens), or nil when not needed.
 	raw *[]MidnightRawToken
 	// > 0 while lexing a raw token (ex. inside a string's interpolation, which
@@ -70,7 +67,7 @@ const (
 	RawSymbol
 	RawString  // whole string literal, including interpolations
 	RawComment // also a leading `#!` line
-	RawMarkup  // whole markup element (see MidnightOptions.Markup)
+	RawMarkup  // whole markup element (see midnight_markup.go)
 )
 
 // MidnightRawToken is a token as written in the source (ex. for formatters).
@@ -124,21 +121,16 @@ func isMidnightHex(c byte) bool {
 	return isMidnightDigit(c) || 'a' <= c && c <= 'f' || 'A' <= c && c <= 'F'
 }
 
-func midnightTokenize(text, source string, opts MidnightOptions) ([]midnightToken, error) {
-	return midnightLex(&midnightLexer{source: source, text: text, line: 1, markup: opts.Markup})
+func midnightTokenize(text, source string) ([]midnightToken, error) {
+	return midnightLex(&midnightLexer{source: source, text: text, line: 1})
 }
 
 // MidnightRawTokens splits Midnight source into tokens as written, including
-// comments. Strings (including any interpolations) are a single token.
+// comments. Strings (including any interpolations) and markup elements are a
+// single token.
 func MidnightRawTokens(text, source string) ([]MidnightRawToken, error) {
-	return MidnightRawTokensWithOptions(text, source, MidnightOptions{})
-}
-
-// MidnightRawTokensWithOptions is like MidnightRawTokens, but w/ experimental
-// extensions. Markup elements are a single token.
-func MidnightRawTokensWithOptions(text, source string, opts MidnightOptions) ([]MidnightRawToken, error) {
 	raw := []MidnightRawToken{}
-	if _, err := midnightLex(&midnightLexer{source: source, text: text, line: 1, raw: &raw, markup: opts.Markup}); err != nil {
+	if _, err := midnightLex(&midnightLexer{source: source, text: text, line: 1, raw: &raw}); err != nil {
 		return nil, err
 	}
 	return raw, nil
@@ -212,7 +204,7 @@ func (lx *midnightLexer) token() {
 		lx.decimal()
 	case c == '[' && (lx.peek(1) == '[' || lx.peek(1) == '='):
 		lx.blockString()
-	case c == '<' && lx.markup && lx.markupStart():
+	case c == '<' && lx.markupStart():
 		lx.markupElement()
 	default:
 		for _, n := range []int{3, 2} {
@@ -243,7 +235,7 @@ func (lx *midnightLexer) recordRaw(start, line int) {
 		kind = RawString
 	case strings.HasPrefix(text, "--"):
 		kind = RawComment
-	case lx.markup && len(text) > 1 && text[0] == '<' && (isMidnightWordHead(text[1]) || text[1] == '>'):
+	case len(text) > 1 && text[0] == '<' && (isMidnightWordHead(text[1]) || text[1] == '>'):
 		kind = RawMarkup
 	}
 

@@ -8,7 +8,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/taybart/midnight/format"
 	"github.com/taybart/midnight/parse"
@@ -18,22 +17,19 @@ const fmtUsage = `Usage: midnight fmt [options] [paths]
 Formats Midnight files (or all *.mn and *.midnight files under directories) in place. Paths
 default to the current directory, '-' formats stdin to stdout.
 Available options are:
-  -check   don't write files, list unformatted files and exit 1 if there are any
-  -X list  enable experimental midnight extensions (comma separated: %s)`
+  -check   don't write files, list unformatted files and exit 1 if there are any`
 
 // fmtCommand implements `midnight fmt`.
 func fmtCommand(args []string) int {
-	var opt_x string
 	var opt_check bool
 	flags := flag.NewFlagSet("fmt", flag.ContinueOnError)
-	flags.Var((*experimentsFlag)(&opt_x), "X", "")
 	flags.BoolVar(&opt_check, "check", false, "")
 	flags.SetOutput(io.Discard)
 	flags.Usage = func() {}
 
 	paths, err := parseInterspersed(flags, args)
 	if err == flag.ErrHelp {
-		fmt.Printf(fmtUsage+"\n", strings.Join(parse.MidnightExperiments, ", "))
+		fmt.Println(fmtUsage)
 		return 0
 	} else if err != nil {
 		fmt.Println(err.Error())
@@ -41,10 +37,6 @@ func fmtCommand(args []string) int {
 	}
 
 	var opts format.Options
-	if err := opts.Midnight.Enable(opt_x); err != nil {
-		fmt.Println(err.Error())
-		return 1
-	}
 
 	if len(paths) == 0 {
 		paths = []string{"."}

@@ -10,7 +10,7 @@ import (
 
 func check(t *testing.T, source string, opts Options) []string {
 	t.Helper()
-	chunk, err := parse.ParseMidnightWithOptions(strings.NewReader(source), "<string>", parse.MidnightOptions{Match: true})
+	chunk, err := parse.ParseMidnight(strings.NewReader(source), "<string>")
 	if err != nil {
 		t.Fatalf("%s\n%v", source, err)
 	}
@@ -96,7 +96,7 @@ func TestLintFatArrowComponent(t *testing.T) {
 		{"return () => { return () -> <p/> }", nil}, // the markup is in a nested function
 	}
 	for _, c := range cases {
-		chunk, err := parse.ParseMidnightWithOptions(strings.NewReader(c.source), "<string>", parse.MidnightOptions{Markup: true})
+		chunk, err := parse.ParseMidnight(strings.NewReader(c.source), "<string>")
 		if err != nil {
 			t.Fatalf("%s\n%v", c.source, err)
 		}

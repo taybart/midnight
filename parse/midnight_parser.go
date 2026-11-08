@@ -116,14 +116,15 @@ func ParseMidnight(reader io.Reader, name string) ([]ast.Stmt, error) {
 	return ParseMidnightWithOptions(reader, name, MidnightOptions{})
 }
 
-// ParseMidnightWithOptions is like ParseMidnight, but w/ experimental extensions.
+// ParseMidnightWithOptions is like ParseMidnight, but w/ options (ex. the markup
+// factory).
 func ParseMidnightWithOptions(reader io.Reader, name string, opts MidnightOptions) (chunk []ast.Stmt, err error) {
 	text, err := io.ReadAll(reader)
 	if err != nil {
 		return nil, err
 	}
 
-	tokens, err := midnightTokenize(string(text), name, opts)
+	tokens, err := midnightTokenize(string(text), name)
 	if err != nil {
 		return nil, err
 	}
@@ -1092,12 +1093,12 @@ func (p *midnightParser) ifElse() ast.Stmt {
 	return p.closed(root)
 }
 
-// isMatchStatement checks for an (experimental) match statement. `match` is a
+// isMatchStatement checks for a match statement. `match` is a
 // contextual keyword: it is an ordinary name everywhere else (ex.
 // `s:match(p)`), and at the start of a statement when followed by anything
 // that continues a name (ex. `match = 1`, `match.x = 1`, `match(x)`).
 func (p *midnightParser) isMatchStatement() bool {
-	if !p.opts.Match || p.cur.Type != midnightWord || !p.is("match") {
+	if p.cur.Type != midnightWord || !p.is("match") {
 		return false
 	}
 
@@ -1119,7 +1120,7 @@ func (p *midnightParser) isMatchStatement() bool {
 	return !midnightAssignmentOperators[next.Value] || !isMidnightSyntax(p.tokens[p.index+2], "=")
 }
 
-// matchStatement compiles an (experimental) match statement into an if chain:
+// matchStatement compiles a match statement into an if chain:
 //
 //	do
 //	  local subject = <subject>

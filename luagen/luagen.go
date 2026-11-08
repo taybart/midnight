@@ -120,8 +120,10 @@ func mangle(name string) string {
 	}
 
 	// Temporary names from the Midnight parser
-	if n := strings.TrimSuffix(strings.TrimPrefix(name, "(midnight "), ")"); len(n) == len(name)-7 {
-		return "__MIDNIGHT_TMP_" + n + "__"
+	if n, ok := strings.CutPrefix(name, "(midnight "); ok {
+		if n, ok := strings.CutSuffix(n, ")"); ok {
+			return "__MIDNIGHT_TMP_" + n + "__"
+		}
 	}
 
 	var b strings.Builder

@@ -46,25 +46,10 @@ See [docs/TOOLS.md](docs/TOOLS.md) for `compile`, `clean`, `lint`, and `fmt`:
 what they do, their rules, and their output formats / exit codes (for editor
 integrations and CI).
 
-## Experimental extensions
+## Language additions
 
-midnight can enable language extensions that the reference compiler does not
-support. They are off by default, and while they are off midnight parses exactly
-the reference compiler's language.
+Besides Erde's syntax, Midnight has `match` statements and markup elements.
 Scripts that use them only run on midnight (or as `midnight -c` output).
-
-```sh
-midnight -X match script.mn
-midnight -X match,markup script.mn   # (or -X match -X markup)
-```
-
-```go
-L := lua.NewState(lua.Options{Midnight: parse.MidnightOptions{Match: true}})
-chunk, err := parse.ParseMidnightWithOptions(reader, "name.mn", parse.MidnightOptions{Match: true})
-```
-
-Options on the `LState` apply to everything it loads, including `require`d
-modules.
 
 ### `match`
 
@@ -121,7 +106,7 @@ print(require('midnight.markup').render(<Card title="hi"><p>hello {name}</p></Ca
 ```
 
 Elements are lowered to `h(tag, props, ...children)` calls (`h` is imported
-automatically if it isn't in scope, or `-X markup=name` uses another function), so
+automatically if it isn't in scope, or `-markup-factory name` uses another function), so
 the compiled output runs on any lua w/ the runtime. See
 [docs/MARKUP.md](docs/MARKUP.md).
 
@@ -162,10 +147,11 @@ proto, err := lua.Compile(chunk, "name.mn")
 source := luagen.Generate(chunk) // Lua source (works for any chunk, including from Lua)
 ```
 
-## Differences from the reference compiler
+## Differences from Erde
 
-midnight aims to match the [Erde reference compiler](https://github.com/erde-lang/erde)
-exactly, and is tested against its spec suite (see [Testing](#testing)). The
+Apart from the [language additions](#language-additions), midnight accepts
+the language of the [Erde reference compiler](https://github.com/erde-lang/erde)
+and is tested against its spec suite (see [Testing](#testing)). Other
 differences:
 
 - **No Lua targets.** gopher-lua is Lua 5.1 + `goto`, so there are no

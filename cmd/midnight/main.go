@@ -34,14 +34,15 @@ func mainAux() int {
 		}
 	}
 
-	var opt_e, opt_l, opt_p, opt_lang, opt_x string
+	var opt_e, opt_l, opt_p, opt_lang string
+	var midnightOpts parse.MidnightOptions
 	var opt_i, opt_v, opt_dt, opt_dc, opt_c bool
 	var opt_m int
 	flag.StringVar(&opt_e, "e", "", "")
 	flag.StringVar(&opt_l, "l", "", "")
 	flag.StringVar(&opt_p, "p", "", "")
 	flag.StringVar(&opt_lang, "lang", "", "")
-	flag.Var((*experimentsFlag)(&opt_x), "X", "")
+	flag.Var(markupFactoryFlag{&midnightOpts}, "markup-factory", "")
 	flag.IntVar(&opt_m, "mx", 0, "")
 	flag.BoolVar(&opt_i, "i", false, "")
 	flag.BoolVar(&opt_v, "v", false, "")
@@ -59,7 +60,8 @@ Available options are:
   -lang l  source language, 'midnight' or 'lua' (default: 'lua' for *.lua
            scripts, otherwise 'midnight')
   -l name  require library 'name'
-  -X list  enable experimental midnight extensions (comma separated: ` + strings.Join(parse.MidnightExperiments, ", ") + `)
+  -markup-factory name
+           function markup elements call (default: h, see docs/MARKUP.md)
   -mx MB   memory limit(default: unlimited)
   -dt      dump AST trees
   -dc      dump VM codes
@@ -72,11 +74,6 @@ A script of '-' is read from stdin.`)
 	flag.Parse()
 	if opt_lang != "" && opt_lang != "midnight" && opt_lang != "lua" {
 		fmt.Printf("invalid -lang '%s' (expected 'midnight' or 'lua')\n", opt_lang)
-		return 1
-	}
-	var midnightOpts parse.MidnightOptions
-	if err := midnightOpts.Enable(opt_x); err != nil {
-		fmt.Println(err.Error())
 		return 1
 	}
 	if len(opt_p) != 0 {
@@ -285,16 +282,15 @@ func loadline(rl *readline.Instance, L *lua.LState, isMidnight bool) (*lua.LFunc
 	}
 }
 
-// experimentsFlag is the -X flag, which may be repeated (`-X match -X markup` is
-// the same as `-X match,markup`).
-type experimentsFlag string
+// markupFactoryFlag is the -markup-factory flag (see
+// parse.MidnightOptions.MarkupFactory).
+type markupFactoryFlag struct{ opts *parse.MidnightOptions }
 
-func (f *experimentsFlag) String() string { return string(*f) }
-
-func (f *experimentsFlag) Set(value string) error {
-	if *f != "" {
-		value = string(*f) + "," + value
+func (f markupFactoryFlag) String() string {
+	if f.opts == nil {
+		return ""
 	}
-	*f = experimentsFlag(value)
-	return nil
+	return f.opts.MarkupFactory
 }
+
+func (f markupFactoryFlag) Set(value string) error { return f.opts.SetMarkupFactory(value) }

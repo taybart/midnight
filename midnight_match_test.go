@@ -10,8 +10,6 @@ import (
 	"github.com/taybart/midnight/parse"
 )
 
-var midnightMatchOptions = parse.MidnightOptions{Match: true}
-
 const midnightMatchKind = `
 local MOVIE = 'movie'
 local function kind(mode, count = 0) {
@@ -63,7 +61,7 @@ var midnightMatchCases = []struct {
 
 func TestMidnightMatch(t *testing.T) {
 	for _, c := range midnightMatchCases {
-		L := NewState(Options{Midnight: midnightMatchOptions})
+		L := NewState()
 		if err := L.DoMidnightString(c.source); err != nil {
 			t.Errorf("%s\n%v", c.source, err)
 		} else if got := L.Get(-1).String(); got != c.want {
@@ -75,7 +73,7 @@ func TestMidnightMatch(t *testing.T) {
 
 func TestLuagenMidnightMatch(t *testing.T) {
 	for _, c := range midnightMatchCases {
-		chunk, err := parse.ParseMidnightWithOptions(strings.NewReader(c.source), "<string>", midnightMatchOptions)
+		chunk, err := parse.ParseMidnight(strings.NewReader(c.source), "<string>")
 		if err != nil {
 			t.Fatalf("%s\n%v", c.source, err)
 		}
@@ -103,7 +101,7 @@ func TestMidnightMatchSyntaxErrors(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		L := NewState(Options{Midnight: midnightMatchOptions})
+		L := NewState()
 		_, err := L.LoadMidnightString(c.source)
 		L.Close()
 		if err == nil || !strings.Contains(err.Error(), c.want) {
@@ -112,17 +110,14 @@ func TestMidnightMatchSyntaxErrors(t *testing.T) {
 	}
 }
 
-// Without the experiment, `match` is an ordinary name (same as the reference
-// compiler).
-func TestMidnightMatchDisabled(t *testing.T) {
+// `match` is a contextual keyword: it's still an ordinary name everywhere but
+// the start of a match statement.
+func TestMidnightMatchAsName(t *testing.T) {
 	if got := midnightEval(t, `local match = x -> x + 1; return match(1)`); got.String() != "2" {
 		t.Errorf("got %s, want 2", got)
 	}
-
-	L := NewState()
-	defer L.Close()
-	if _, err := L.LoadMidnightString(`match x { 1 => {} }`); err == nil {
-		t.Error("match statement parsed w/o the match experiment")
+	if got := midnightEval(t, `return ("abc"):match("b")`); got.String() != "b" {
+		t.Errorf("got %s, want b", got)
 	}
 }
 
@@ -134,7 +129,7 @@ func TestMidnightMatchRequire(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	L := NewState(Options{Midnight: midnightMatchOptions})
+	L := NewState()
 	defer L.Close()
 	L.SetField(L.GetField(L.Get(GlobalsIndex), "package"), "path", LString(filepath.Join(dir, "?.mn")))
 

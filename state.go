@@ -109,7 +109,7 @@ type Options struct {
 	// If `MinimizeStackMemory` is set, the call stack will be automatically grown or shrank up to a limit of
 	// `CallStackSize` in order to minimize memory usage. This does incur a slight performance penalty.
 	MinimizeStackMemory bool
-	// Experimental Midnight extensions, used when loading Midnight source.
+	// Midnight parser options (ex. the markup factory), used when loading Midnight source.
 	Midnight parse.MidnightOptions // midnight
 }
 

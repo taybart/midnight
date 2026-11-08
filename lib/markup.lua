@@ -1,4 +1,4 @@
--- midnight.markup: runtime for midnight's `markup` experiment (`midnight -X markup`).
+-- midnight.markup: runtime for midnight's markup elements.
 --
 -- Elements are lowered to calls of `h(tag, props, ...children)`:
 --

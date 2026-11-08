@@ -1,6 +1,6 @@
 package lua
 
-// midnight: runtime library for the `markup` experiment (see parse/midnight_markup.go),
+// midnight: runtime library for markup elements (see parse/midnight_markup.go),
 // preloaded as `midnight.markup` (and its vendored morph library as
 // `midnight.markup.idiomorph`).
 

@@ -25,13 +25,13 @@ Compared to upstream gopher-lua:
 | | `config.go` | `./?.mn` added to the default `package.path` |
 | | `loadlib.go` | `require` also tries `.mn` for each `.lua` pattern in `package.path` (so a custom `LUA_PATH` finds Midnight modules) |
 | | `linit.go` | open the `bit32` library, and preload the markup runtime |
-| | `state.go`, `_state.go` | `Options.Midnight` (experimental extensions for Midnight source loaded by the state), and read-only table checks in `setField` / `setFieldString` / `SetMetatable` |
+| | `state.go`, `_state.go` | `Options.Midnight` (parser options, ex. the markup factory, for Midnight source loaded by the state), and read-only table checks in `setField` / `setFieldString` / `SetMetatable` |
 | | `value.go`, `table.go`, `tablelib.go` | read-only tables (`LTable.readOnly`, checked by the `RawSet*` / `Append` / `Insert` / `Remove` methods and `table.sort`), see `midnight_readonly.go` |
 | **New** | `parse/midnight_lexer.go`, `parse/midnight_parser.go` | the Midnight front end (Midnight -> AST) |
 | | `midnight.go` | `LoadMidnight`, `LoadMidnightString`, `DoMidnightString` |
 | | `midnight_readonly.go` | `LTable.Freeze` / `FreezeAll`: read-only tables, which states in different goroutines can share (ex. a host's cached data) |
-| | `parse/midnight_options.go` | experimental extensions (`match`, `markup`), off by default |
-| | `parse/midnight_markup.go`, `midnight_markup.go`, `lib/markup.lua`, `lib/idiomorph.lua` | the `markup` experiment and its runtime (see [MARKUP.md](MARKUP.md)) |
+| | `parse/midnight_options.go` | parser options (the markup factory) |
+| | `parse/midnight_markup.go`, `midnight_markup.go`, `lib/markup.lua`, `lib/idiomorph.lua` | markup elements and their runtime (see [MARKUP.md](MARKUP.md)) |
 | | `midnight_cache.go` | compiled file cache (shared bytecode, keyed by path, mtime, size, and options) |
 | | `bit32lib.go` | Lua 5.2's `bit32` (gopher-lua is Lua 5.1, which has no bit operators) |
 | | `luagen/` | AST -> Lua source (optional, see [strategy B](#b-source-to-source)) |
@@ -160,18 +160,17 @@ so they can never clash w/ user names; a source printer must rename them).
 | `local function f() {}` | `local function f() end` (`f` can refer to itself) |
 | `if`, `for`, `while`, `repeat`, `do`, `goto`, `::label::` | same as Lua, w/ braces |
 
-Experimental (midnight only, off by default, see the README):
+Midnight additions (not in Erde, see the README):
 
 | Midnight | Lua |
 | --- | --- |
 | `match s { a \| b => { X } _ if g => { Y } _ => { Z } }` | `do local tmp = s if tmp == a or tmp == b then X elseif g then Y else Z end end` |
 
-Keep experiments behind an option, so the default language stays identical to
-the reference compiler. Prefer contextual keywords over reserved ones: `match`
+Prefer contextual keywords over reserved ones, so Erde code keeps working: `match`
 is only a keyword at the start of a statement when the next token can't
 continue a name (`=`, `,`, `.`, `[`, `:`, `op=`, or a call `match(x)` that isn't
 followed by `{`), so code using `match` as a name (ex. `s:match(p)`) still
-works with the experiment on.
+works.
 
 Errors the parser must raise (the reference compiler does):
 

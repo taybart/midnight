@@ -9,8 +9,6 @@ import (
 	"github.com/taybart/midnight/parse"
 )
 
-var midnightMarkupOptions = parse.MidnightOptions{Markup: true}
-
 const midnightMarkupPrelude = "local { h, render, map, raw, document } = require('midnight.markup')\n"
 
 var midnightMarkupCases = []struct {
@@ -101,7 +99,7 @@ return render(page)`, `<html><head><title>t</title></head><body class="x" id="y"
 func TestMidnightMarkup(t *testing.T) {
 	for _, c := range midnightMarkupCases {
 		source := midnightMarkupPrelude + c.source
-		L := NewState(Options{Midnight: midnightMarkupOptions})
+		L := NewState()
 		if err := L.DoMidnightString(source); err != nil {
 			t.Errorf("%s\n%v", c.source, err)
 		} else if got := L.Get(-1).String(); got != c.want {
@@ -114,7 +112,7 @@ func TestMidnightMarkup(t *testing.T) {
 func TestLuagenMidnightMarkup(t *testing.T) {
 	for _, c := range midnightMarkupCases {
 		source := midnightMarkupPrelude + c.source
-		chunk, err := parse.ParseMidnightWithOptions(strings.NewReader(source), "<string>", midnightMarkupOptions)
+		chunk, err := parse.ParseMidnight(strings.NewReader(source), "<string>")
 		if err != nil {
 			t.Fatalf("%s\n%v", c.source, err)
 		}
@@ -149,7 +147,7 @@ return require('midnight.markup').render(<Card><b/></Card>)`, `<div><b></b></div
 
 func TestMidnightMarkupAutomaticRuntime(t *testing.T) {
 	for _, c := range midnightMarkupAutoCases {
-		chunk, err := parse.ParseMidnightWithOptions(strings.NewReader(c.source), "<string>", midnightMarkupOptions)
+		chunk, err := parse.ParseMidnight(strings.NewReader(c.source), "<string>")
 		if err != nil {
 			t.Fatalf("%s\n%v", c.source, err)
 		}
@@ -162,7 +160,7 @@ func TestMidnightMarkupAutomaticRuntime(t *testing.T) {
 			{"native", func(L *LState) error { return L.DoMidnightString(c.source) }},
 			{"luagen", func(L *LState) error { return L.DoString(generated) }},
 		} {
-			L := NewState(Options{Midnight: midnightMarkupOptions})
+			L := NewState()
 			if err := run.fn(L); err != nil {
 				t.Errorf("%s (%s)\n%s\n%v", c.source, run.name, generated, err)
 			} else if got := L.Get(-1); c.want != "" && got.String() != c.want {
@@ -178,7 +176,7 @@ func TestMidnightMarkupFactory(t *testing.T) {
 	source := `local react = { createElement = (tag, props, ...) -> ({ tag = tag, n = select('#', ...) }) }
 local e = <div a="1">x{1}<b/></div>
 return e.tag .. e.n`
-	L := NewState(Options{Midnight: parse.MidnightOptions{Markup: true, MarkupFactory: "react.createElement"}})
+	L := NewState(Options{Midnight: parse.MidnightOptions{MarkupFactory: "react.createElement"}})
 	defer L.Close()
 	if err := L.DoMidnightString(source); err != nil {
 		t.Fatal(err)
@@ -207,7 +205,7 @@ func TestMidnightMarkupSyntaxErrors(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		L := NewState(Options{Midnight: midnightMarkupOptions})
+		L := NewState()
 		err := L.DoMidnightString(midnightMarkupPrelude + c.source)
 		L.Close()
 		if err == nil || !strings.Contains(err.Error(), c.want) {
@@ -216,22 +214,19 @@ func TestMidnightMarkupSyntaxErrors(t *testing.T) {
 	}
 }
 
-// Without the experiment, `<` is always an operator.
-func TestMidnightMarkupDisabled(t *testing.T) {
-	L := NewState()
-	defer L.Close()
-	if _, err := L.LoadMidnightString(`local x = <p/>`); err == nil {
-		t.Error("markup parsed w/o the markup experiment")
+// `<` is still an operator after anything that ends a value.
+func TestMidnightMarkupLessThan(t *testing.T) {
+	src := `local a, b, t = 1, 2, { 1 }
+local f = () -> 1
+return a <b && 1 < b && f() < b && t[1] <b && #t <b`
+	if got := midnightEval(t, src); got != LTrue {
+		t.Errorf("got %s, want true", got)
 	}
 }
 
-// jsx is the old (deprecated) name of the experiment and the runtime.
+// jsx is the old (deprecated) name of the runtime.
 func TestMidnightMarkupOldName(t *testing.T) {
-	var opts parse.MidnightOptions
-	if err := opts.Enable("match,jsx=ui.h"); err != nil || !opts.Markup || opts.MarkupFactory != "ui.h" {
-		t.Fatalf("-X jsx: %+v %v", opts, err)
-	}
-	L := NewState(Options{Midnight: midnightMarkupOptions})
+	L := NewState()
 	defer L.Close()
 	if err := L.DoMidnightString(`assert(require('midnight.jsx') == require('midnight.markup'), 'midnight.jsx')`); err != nil {
 		t.Fatal(err)
@@ -241,7 +236,7 @@ func TestMidnightMarkupOldName(t *testing.T) {
 func TestFormatMidnightMarkup(t *testing.T) {
 	in := "local x=<div   class='a'>\n  hi {name}\n    <b/>\n</div>\nlocal y=a<b"
 	want := "local x = <div   class='a'>\n  hi {name}\n    <b/>\n</div>\nlocal y = a < b\n"
-	got, err := format.Format([]byte(in), format.Options{Midnight: midnightMarkupOptions})
+	got, err := format.Format([]byte(in), format.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -262,7 +257,7 @@ local ids = (html) -> {
 
 // mount registers `on*` functions as actions, and dispatch runs them.
 func TestMidnightMarkupActions(t *testing.T) {
-	L := NewState(Options{Midnight: midnightMarkupOptions})
+	L := NewState()
 	defer L.Close()
 
 	source := midnightMarkupActionsPrelude + `local count, last = 0, nil
@@ -309,7 +304,7 @@ return page, res.body, res.headers['Content-Type'], dbl .. ' ' .. click, stale`
 
 // dispatch only sends the components whose own markup changed.
 func TestMidnightMarkupFragments(t *testing.T) {
-	L := NewState(Options{Midnight: midnightMarkupOptions})
+	L := NewState()
 	defer L.Close()
 
 	source := midnightMarkupActionsPrelude + `local title, note, outside = 'hi', 'n', 'o'
@@ -367,7 +362,7 @@ return table.concat(out, '\n')`
 
 // A component w/ a document root (ex. <html>) can't be sent on its own.
 func TestMidnightMarkupFragmentsDocument(t *testing.T) {
-	L := NewState(Options{Midnight: midnightMarkupOptions})
+	L := NewState()
 	defer L.Close()
 	source := midnightMarkupActionsPrelude + `local x = 1
 local App = () -> <html><body><button onclick={() -> { x += 1 }}>{x}</button></body></html>
@@ -383,7 +378,7 @@ return markup.dispatch(ids(page)[1]).body`
 
 // Without mount, functions in attributes are skipped (plain server rendering).
 func TestMidnightMarkupActionsUnmounted(t *testing.T) {
-	L := NewState(Options{Midnight: midnightMarkupOptions})
+	L := NewState()
 	defer L.Close()
 	if err := L.DoMidnightString(`return require('midnight.markup').document(<b onclick={() -> 1}/>)`); err != nil {
 		t.Fatal(err)
@@ -395,7 +390,7 @@ func TestMidnightMarkupActionsUnmounted(t *testing.T) {
 
 // state is kept per component instance (by position in the tree, or `key`).
 func TestMidnightMarkupState(t *testing.T) {
-	L := NewState(Options{Midnight: midnightMarkupOptions})
+	L := NewState()
 	defer L.Close()
 
 	source := midnightMarkupActionsPrelude + `local show, items, order = false, { 'x', 'y' }, {}
@@ -485,17 +480,14 @@ return table.concat(out, '\n'), table.concat(order, ' ', 1, 3)`
 	}
 }
 
-// `-X markup=name` sets the factory.
-func TestMidnightMarkupFactoryOption(t *testing.T) {
+// SetMarkupFactory (the CLI's -markup-factory) only takes (dotted) names.
+func TestMidnightSetMarkupFactory(t *testing.T) {
 	var opts parse.MidnightOptions
-	if err := opts.Enable("match, markup=harmony.ui.h"); err != nil {
-		t.Fatal(err)
+	if err := opts.SetMarkupFactory("harmony.ui.h"); err != nil || opts.MarkupFactory != "harmony.ui.h" {
+		t.Errorf("got %+v, %v", opts, err)
 	}
-	if !opts.Match || !opts.Markup || opts.MarkupFactory != "harmony.ui.h" {
-		t.Errorf("got %+v", opts)
-	}
-	for _, bad := range []string{"markup=", "markup=a..b", "markup=1x", "markup=a-b", "markup=local", "match=1", "nope"} {
-		if err := (&parse.MidnightOptions{}).Enable(bad); err == nil {
+	for _, bad := range []string{"", "a..b", "1x", "a-b", "local"} {
+		if err := (&parse.MidnightOptions{}).SetMarkupFactory(bad); err == nil {
 			t.Errorf("%q: expected an error", bad)
 		}
 	}
@@ -504,7 +496,7 @@ func TestMidnightMarkupFactoryOption(t *testing.T) {
 // W/o an rpc url, actions POST to the page's own url (as the browser sees it,
 // ex. behind a proxy that strips a prefix).
 func TestMidnightMarkupDefaultRPC(t *testing.T) {
-	L := NewState(Options{Midnight: midnightMarkupOptions})
+	L := NewState()
 	defer L.Close()
 	source := `local markup = require('midnight.markup')
 local live = () -> <b onclick={() -> {}}/>
@@ -529,7 +521,7 @@ return own, set, tostring(err)`
 
 // A mounted page w/o actions is static: no client script.
 func TestMidnightMarkupStaticPage(t *testing.T) {
-	L := NewState(Options{Midnight: midnightMarkupOptions})
+	L := NewState()
 	defer L.Close()
 	source := `local markup = require('midnight.markup')
 local static = markup.document(markup.mount(() -> <p>hi</p>, { rpc = '/' }))
@@ -563,7 +555,7 @@ func TestMidnightMarkupSharedRuntime(t *testing.T) {
 // idiomorph is inlined from the vendored copy by default; a url loads it
 // from there instead, and false turns it off.
 func TestMidnightMarkupMorph(t *testing.T) {
-	L := NewState(Options{Midnight: midnightMarkupOptions})
+	L := NewState()
 	defer L.Close()
 	source := `local markup = require('midnight.markup')
 local page = morph -> markup.document(markup.mount(() -> <b onclick={() -> {}}/>, { rpc = '/', morph = morph }))
@@ -585,7 +577,7 @@ return page(nil), page('/static/idiomorph.js'), page(false)`
 
 // css turns tables into scoped styles.
 func TestMidnightMarkupCSS(t *testing.T) {
-	L := NewState(Options{Midnight: midnightMarkupOptions})
+	L := NewState()
 	defer L.Close()
 	source := `local markup = require('midnight.markup')
 local s = markup.css({
@@ -651,7 +643,7 @@ return s.card, s.title, again.card, other.title, markup.styles(), markup.render(
 
 // New styles after the page was sent need the whole page.
 func TestMidnightMarkupCSSDispatch(t *testing.T) {
-	L := NewState(Options{Midnight: midnightMarkupOptions})
+	L := NewState()
 	defer L.Close()
 	source := midnightMarkupActionsPrelude + `local fancy = false
 local Btn = () -> {

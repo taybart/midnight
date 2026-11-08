@@ -11,15 +11,13 @@ The `midnight` command has subcommands for working w/ Midnight projects:
 
 All of them take files and / or directories (directories are searched for
 `*.mn` files recursively, and default to `.`), accept flags before or after
-paths, and take `-X list` to enable [experimental extensions](../README.md#experimental-extensions)
-(ex. `-X match,markup`, or repeated: `-X match -X markup`; needed to parse files
-that use them). `-h` shows a command's
-usage.
+paths. `compile` and `lint` also take `-markup-factory name` (see
+[MARKUP.md](MARKUP.md#syntax)). `-h` shows a command's usage.
 
 ## compile
 
 ```sh
-midnight compile [-o dir] [-f] [-p] [-X list] [paths]
+midnight compile [-o dir] [-f] [-p] [-markup-factory name] [paths]
 ```
 
 Compiles `foo.mn` to `foo.lua` (next to it, or under `-o dir`, keeping the
@@ -47,7 +45,7 @@ midnight or the reference compiler). Other Lua files are never removed.
 ## lint
 
 ```sh
-midnight lint [-g list] [-X list] [paths | -]
+midnight lint [-g list] [-markup-factory name] [paths | -]
 ```
 
 Checks for likely mistakes. Explicitly named `.lua` files are checked as Lua,
@@ -100,7 +98,7 @@ otherwise.
 ## fmt
 
 ```sh
-midnight fmt [-check] [-X list] [paths | -]
+midnight fmt [-check] [paths | -]
 ```
 
 Formats files in place (printing the paths it changed), or stdin to stdout w/

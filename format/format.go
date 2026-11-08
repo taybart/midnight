@@ -23,10 +23,8 @@ import (
 	"github.com/taybart/midnight/parse"
 )
 
-type Options struct {
-	// Experimental Midnight extensions (needed to parse sources that use them).
-	Midnight parse.MidnightOptions
-}
+// Options configures Format. There are none yet.
+type Options struct{}
 
 const indentUnit = "  "
 
@@ -53,7 +51,7 @@ func Format(source []byte, opts Options) ([]byte, error) {
 		return nil, err
 	}
 
-	raw, err := parse.MidnightRawTokensWithOptions(text, "<format>", opts.Midnight)
+	raw, err := parse.MidnightRawTokens(text, "<format>")
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +91,7 @@ func Format(source []byte, opts Options) ([]byte, error) {
 }
 
 func dump(text string, opts Options) (string, error) {
-	chunk, err := parse.ParseMidnightWithOptions(strings.NewReader(text), "<format>", opts.Midnight)
+	chunk, err := parse.ParseMidnight(strings.NewReader(text), "<format>")
 	if err != nil {
 		return "", err
 	}

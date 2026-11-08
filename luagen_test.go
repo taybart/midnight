@@ -83,3 +83,16 @@ func TestLuagenMidnight(t *testing.T) {
 		L.Close()
 	}
 }
+
+// The Midnight parser's temporary names (ex. a match subject) become
+// __MIDNIGHT_TMP_N__ in generated Lua.
+func TestLuagenTempNames(t *testing.T) {
+	chunk, err := parse.ParseMidnight(strings.NewReader(`match x { 1 => { print(1) } }`), "<string>")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := luagen.Generate(chunk)
+	if !strings.Contains(src, "__MIDNIGHT_TMP_") || strings.Contains(src, "__MIDNIGHT_MIDNIGHT_") {
+		t.Errorf("unexpected temp names:\n%s", src)
+	}
+}

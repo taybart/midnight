@@ -38,28 +38,24 @@ Rules:
 Add '` + lintIgnoreComment + `' in a comment to ignore a line.
 Available options are:
   -g list  additional globals, comma separated (ex. ones set by the host)
-  -X list  enable experimental midnight extensions (comma separated: %s)`
+  -markup-factory name
+           function markup elements call (default: h, see docs/MARKUP.md)`
 
 // lintCommand implements `midnight lint`.
 func lintCommand(args []string) int {
-	var opt_g, opt_x string
+	var opt_g string
+	var midnightOpts parse.MidnightOptions
 	flags := flag.NewFlagSet("lint", flag.ContinueOnError)
 	flags.StringVar(&opt_g, "g", "", "")
-	flags.Var((*experimentsFlag)(&opt_x), "X", "")
+	flags.Var(markupFactoryFlag{&midnightOpts}, "markup-factory", "")
 	flags.SetOutput(io.Discard)
 	flags.Usage = func() {}
 
 	paths, err := parseInterspersed(flags, args)
 	if err == flag.ErrHelp {
-		fmt.Printf(lintUsage+"\n", strings.Join(parse.MidnightExperiments, ", "))
+		fmt.Println(lintUsage)
 		return 0
 	} else if err != nil {
-		fmt.Println(err.Error())
-		return 1
-	}
-
-	var midnightOpts parse.MidnightOptions
-	if err := midnightOpts.Enable(opt_x); err != nil {
 		fmt.Println(err.Error())
 		return 1
 	}

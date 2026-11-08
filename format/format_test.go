@@ -4,8 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/taybart/midnight/parse"
 )
 
 // Formats every valid spec snippet (see testdata/midnight-spec). Format itself
@@ -112,7 +110,7 @@ func TestFormatStyle(t *testing.T) {
 func TestFormatMatch(t *testing.T) {
 	in := "match x {\n'a'|'b'=>{print(1)}\n_ if x:match('c')=>{\nprint(2)\n}\n}\nmatch(y)"
 	want := "match x {\n  'a' | 'b' => { print(1) }\n  _ if x:match('c') => {\n    print(2)\n  }\n}\nmatch(y)\n"
-	got := testFormat(t, "match", []byte(in), Options{Midnight: parse.MidnightOptions{Match: true}})
+	got := testFormat(t, "match", []byte(in), Options{})
 	if got != nil && string(got) != want {
 		t.Errorf("got\n%s\nwant\n%s", got, want)
 	}

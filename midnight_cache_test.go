@@ -26,7 +26,7 @@ func TestCompiledFileCache(t *testing.T) {
 		return L, L.DoString(`m = require('mod')`)
 	}
 
-	markup := parse.MidnightOptions{Markup: true}
+	markup := parse.MidnightOptions{}
 	write("local t = { n = 1, el = tostring(<b/>) }\nreturn t", time.Unix(1000, 0))
 
 	a, err := load(markup)
@@ -52,8 +52,8 @@ func TestCompiledFileCache(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// the midnight options are part of the key (w/o markup, it doesn't parse)
-	if c, err := load(parse.MidnightOptions{}); err == nil {
+	// the midnight options are part of the key (w/ a missing factory, it fails)
+	if c, err := load(parse.MidnightOptions{MarkupFactory: "missing.h"}); err == nil {
 		c.Close()
 		t.Error("used code compiled w/ other midnight options")
 	}

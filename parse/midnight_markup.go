@@ -8,7 +8,7 @@ import (
 	"github.com/taybart/midnight/ast"
 )
 
-// markup experiment (see MidnightOptions.Markup). Elements are lowered to calls of the
+// Markup elements (HTML-like, JSX style). Elements are lowered to calls of the
 // factory function (`h` by default), same as JSX's classic runtime:
 //
 //	<div class="card" id={id}>hi {name}</div>

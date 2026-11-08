@@ -1,6 +1,6 @@
-# Markup (`-X markup`)
+# Markup
 
-An experimental extension for writing HTML in midnight, JSX style, and a small
+Midnight has JSX style elements for writing HTML, and a small
 runtime (`midnight.markup`) that renders it to HTML: components, scoped styles, and
 (w/ a host that keeps state between requests, like
 [rest](https://github.com/taybart/rest)'s `page` handlers) interactive pages.
@@ -25,7 +25,7 @@ return () -> <html>
 </html>
 ```
 
-- [Enabling it](#enabling-it)
+- [Running it](#running-it)
 - [Syntax](#syntax)
 - [Rendering](#rendering)
 - [Components](#components)
@@ -35,21 +35,25 @@ return () -> <html>
 - [Portability](#portability)
 - [Tooling](#tooling)
 
-## Enabling it
+## Running it
+
+Markup is part of the language, so there's nothing to enable:
 
 ```sh
-midnight -X markup page.mn               # run
-midnight compile -X markup .               # compile to lua (runs on any lua, see Portability)
-midnight compile -X markup=harmony.h .     # w/ another factory (see below)
+midnight page.mn                                 # run
+midnight compile .                               # compile to lua (runs on any lua, see Portability)
+midnight compile -markup-factory harmony.h .     # w/ another factory (see below)
 ```
 
 ```go
-L := lua.NewState(lua.Options{Midnight: parse.MidnightOptions{Markup: true}})
+L := lua.NewState(lua.Options{Midnight: parse.MidnightOptions{MarkupFactory: "harmony.h"}})
 ```
 
-Experiments combine (`-X match,markup`, or `-X match -X markup`). Without `-X
-markup`, `<` is always an operator. `jsx` (`-X jsx`, `require('midnight.jsx')`) is
-the old name, and still works for now.
+`<` only starts an element where a value can start (ex. after `=`, `(`, `,`,
+`return`, or another element). After anything that ends a value (a name,
+number, string, `)`, `]`, `}`), it's the less than operator, so `a <b` and
+`f() < x` are comparisons. `require('midnight.jsx')` is the runtime's old name,
+and still works for now.
 
 ## Syntax
 
@@ -91,8 +95,8 @@ require('midnight.markup')`). If there's no `h`, it's imported automatically (on
 the top of the file, like JSX's automatic runtime), so files w/ elements don't
 need any imports.
 
-`-X markup=name` (`MidnightOptions.MarkupFactory`) uses another function instead, ex.
-`-X markup=harmony.h` or `-X markup=React.createElement`.
+`-markup-factory name` (`MidnightOptions.MarkupFactory`) uses another function
+instead, ex. `-markup-factory harmony.h` or `-markup-factory React.createElement`.
 
 ## Rendering
 
@@ -248,7 +252,7 @@ The host has to run the page and its actions in the same lua state (rest's
 ## Portability
 
 Only the syntax is midnight specific. The runtime is plain lua (5.1 to 5.5,
-LuaJIT), so `midnight compile -X markup` output runs anywhere w/ the runtime on
+LuaJIT), so `midnight compile` output runs anywhere w/ the runtime on
 `package.path`:
 
 ```
@@ -260,7 +264,7 @@ midnight preloads both (and compiles them once per process).
 
 ## Tooling
 
-- `midnight lint -X markup` and `midnight fmt -X markup` support it (`fmt` keeps elements as
+- `midnight lint` and `midnight fmt` support it (`fmt` keeps elements as
   written).
 - [tree-sitter-midnight](https://github.com/taybart/tree-sitter-midnight) always parses
   it (w/ highlights, indents, and css / js injected into `<style>` /
