@@ -121,11 +121,30 @@ local function classValue(class)
   return table.concat(parts, ' ')
 end
 
+-- What's kept for a page between renders. `mount` / `dispatch` use the
+-- default one; each `session()` has its own, so one lua state can serve many
+-- pages (ex. a bot's panel for each of its viewers).
+local function newPage()
+  return {
+    -- functions in `on*` attributes, by id (see below)
+    actions = {},
+    -- { root = fn, rpc = url, headers = {}, morph = { inline | src } | false,
+    --   attrs = 'data' (sessions: actions as `data-mn-<event>` attributes) }
+    mounted = nil,
+    -- component instances, by id (see below): id -> { hooks = {} }
+    instances = {},
+    -- `rendered` of the last (outermost) render, and the root's shell
+    lastRender = nil,
+    -- sheets in the last document of the mounted page
+    sentSheets = 0,
+  }
+end
+-- The page being rendered.
+local P = newPage()
+
 -- Actions (see `mount`): functions in `on*` attributes, by id. Ids are the
 -- id of the component they're in and their position in it (ex. `r:1.2:3#1`),
 -- so they don't change when other components do.
-local actions = {}
-local mounted -- { root = fn, rpc = url, headers = {}, morph = { inline | src } | false }
 
 -- `onclick`, `onClick`, and `on:click` are all `click`.
 local function eventName(key)
@@ -145,7 +164,6 @@ end
 -- and which component it is), which is what its state is kept by (see
 -- `state`). Instances that aren't rendered again are dropped after each
 -- render.
-local instances = {} -- id -> { hooks = {} }
 local seen = {} -- ids rendered in the current render
 local current -- { instance, hook } of the component being rendered
 
@@ -160,7 +178,6 @@ local current -- { instance, hook } of the component being rendered
 -- }
 local rendered = {}
 -- `rendered` of the last (outermost) render, and the root's shell
-local lastRender
 
 -- The component being rendered (or the root): { id, children, nextAction },
 -- where children are the indices of child components' html in its buffer.
@@ -194,7 +211,7 @@ local renderTo
 local function renderElement(buf, node, path, owners)
   local tag, props = node.tag, node.props
   buf[#buf + 1] = '<' .. tag
-  if owners and mounted then
+  if owners and P.mounted then
     buf[#buf + 1] = ' data-midnight="' .. escape(table.concat(owners, ' ')) .. '"'
     for _, owner in ipairs(owners) do
       if rendered[owner] then
@@ -206,12 +223,18 @@ local function renderElement(buf, node, path, owners)
   -- Sorted, so output is deterministic.
   for _, key in ipairs(sortedKeys(props)) do
     local value = props[key]
-    local event = type(value) == 'function' and mounted and eventName(key)
+    local event = type(value) == 'function' and P.mounted and eventName(key)
     if event then
       frame.nextAction = frame.nextAction + 1
       local id = frame.id .. '#' .. frame.nextAction
-      actions[id] = value
-      buf[#buf + 1] = ' on' .. event .. '="midnight.rpc(' .. jsString(id) .. ', event)"'
+      P.actions[id] = value
+      if P.mounted.attrs == 'data' then
+        -- for hosts w/ their own client (ex. one that sanitizes the html,
+        -- which drops `on*` attributes): the event's action id, nothing to run
+        buf[#buf + 1] = ' data-mn-' .. event:gsub('[^%w-]', '') .. '="' .. escape(id) .. '"'
+      else
+        buf[#buf + 1] = ' on' .. event .. '="midnight.rpc(' .. jsString(id) .. ', event)"'
+      end
     elseif key == 'children' or key == 'key' or value == nil or value == false or type(value) == 'function' then
       -- skipped (functions are event handlers, which only mean something in
       -- the browser, see `mount`)
@@ -254,10 +277,10 @@ end
 local function renderComponent(buf, node, rawText, path, owners)
   local id = path .. ':' .. componentId(node.component)
   seen[id] = true
-  local instance = instances[id]
+  local instance = P.instances[id]
   if not instance then
     instance = { hooks = {} }
-    instances[id] = instance
+    P.instances[id] = instance
   end
   local entry = { parent = frame.id }
   rendered[id] = entry
@@ -327,7 +350,7 @@ function M.render(node)
   local root = 'r'
   local parent, parentFrame = current, frame
   if outermost then
-    actions, seen, rendered, nestedRenders = {}, {}, {}, 0
+    P.actions, seen, rendered, nestedRenders = {}, {}, {}, 0
   else
     nestedRenders = nestedRenders + 1
     root = 'n' .. nestedRenders
@@ -346,12 +369,12 @@ function M.render(node)
 
   local html = table.concat(buf)
   if outermost then
-    for id in pairs(instances) do
+    for id in pairs(P.instances) do
       if not seen[id] then
-        instances[id] = nil
+        P.instances[id] = nil
       end
     end
-    lastRender = { instances = rendered, shell = shell(buf, rootFrame.children) }
+    P.lastRender = { instances = rendered, shell = shell(buf, rootFrame.children) }
   end
   return html
 end
@@ -409,7 +432,6 @@ end
 
 local sheets = {} -- css text of each `css` call (in order, no duplicates)
 local sheetHashes = {}
-local sentSheets = 0 -- sheets in the last document of the mounted page
 
 local BASE36 = '0123456789abcdefghijklmnopqrstuvwxyz'
 local function hash(s)
@@ -606,7 +628,7 @@ function M.mount(root, opts)
   elseif type(morph) == 'string' then
     morph = { src = morph }
   end
-  mounted = { root = root, rpc = opts.rpc, headers = opts.headers or {}, morph = morph }
+  P.mounted = { root = root, rpc = opts.rpc, headers = opts.headers or {}, morph = morph }
   return root()
 end
 
@@ -631,8 +653,8 @@ end
 -- components would otherwise keep their html many times over).
 local dispatching = false
 local function forgetHTML()
-  if lastRender then
-    for _, entry in pairs(lastRender.instances) do
+  if P.lastRender then
+    for _, entry in pairs(P.lastRender.instances) do
       entry.html = nil
     end
   end
@@ -690,20 +712,20 @@ end
 -- or the whole page when something outside of a component (with its own root
 -- element) changed. Nothing changed is an empty body.
 function M.dispatch(id, data)
-  assert(mounted, 'markup: dispatch requires a mounted page (see mount)')
+  assert(P.mounted, 'markup: dispatch requires a mounted page (see mount)')
   local headers = { ['Content-Type'] = 'text/html; charset=utf-8' }
-  local action = actions[id]
+  local action = P.actions[id]
   if not action then
     -- a stale action, ex. a second click on a button the first one removed:
     -- the client is out of date, so it gets the whole page
-    return { headers = headers, body = M.document(mounted.root()) }
+    return { headers = headers, body = M.document(P.mounted.root()) }
   end
 
-  local before, sent = lastRender, sentSheets
+  local before, sent = P.lastRender, P.sentSheets
   dispatching = true
   local ok, page = pcall(function()
     action(data or {})
-    return M.document(mounted.root())
+    return M.document(P.mounted.root())
   end)
   dispatching = false
   if not ok then
@@ -711,7 +733,7 @@ function M.dispatch(id, data)
   end
 
   -- new styles (from `css` calls the page hasn't seen) need the whole page
-  local body = before and #sheets == sent and changed(before, lastRender) or page
+  local body = before and #sheets == sent and changed(before, P.lastRender) or page
   forgetHTML()
   return { headers = headers, body = body }
 end
@@ -720,7 +742,66 @@ end
 -- actions (if not, the page is static: it never calls the server back, so
 -- there's nothing to keep around for it).
 function M.isInteractive()
-  return mounted ~= nil and next(actions) ~= nil
+  return P.mounted ~= nil and next(P.actions) ~= nil
+end
+
+-- session() is a page of its own: its own components' state and actions, so
+-- one lua state can serve many pages at once (ex. a panel for each viewer),
+-- instead of the one `mount` makes. Its actions are rendered as
+-- `data-mn-<event>="id"` attributes (ex. `data-mn-click`), w/o a client
+-- script: the host finds them, summarizes the event (like `mount`'s client:
+-- `{ type, value, checked, key, form }`), and calls `dispatch`.
+--
+--   local s = session()
+--   local html = s:render(() -> <App/>)  -- (again after each action)
+--   s:dispatch(id, data)                  -- runs the action, false if stale
+local Session = {}
+Session.__index = Session
+
+function M.session()
+  return setmetatable({ page = newPage() }, Session)
+end
+
+-- render(root) renders `root()` (or `root`, a node) w/ this session's state,
+-- and keeps it as the page's root.
+function Session:render(root)
+  if type(root) ~= 'function' then
+    local node = root
+    root = function() return node end
+  end
+  local page = self.page
+  page.mounted = { root = root, attrs = 'data' }
+  local previous = P
+  P = page
+  local ok, html = pcall(function() return M.render(root()) end)
+  P = previous
+  if not ok then
+    error(html, 0)
+  end
+  return html
+end
+
+-- rerender() renders the root of the last `render` again.
+function Session:rerender()
+  assert(self.page.mounted, 'markup: rerender requires a rendered session')
+  return self:render(self.page.mounted.root)
+end
+
+-- dispatch(id, data) runs the action `id` (from the last render) w/ the
+-- event `data`. Returns false if there's no such action (ex. the client is
+-- out of date). Render again for what changed.
+function Session:dispatch(id, data)
+  local action = self.page.actions[id]
+  if not action then
+    return false
+  end
+  action(data or {})
+  return true
+end
+
+-- isInteractive returns whether the last render had any actions.
+function Session:isInteractive()
+  return next(self.page.actions) ~= nil
 end
 
 -- document(node) is like render, but prefixed w/ `<!DOCTYPE html>`. For a
@@ -740,8 +821,8 @@ function M.document(node)
     end
   end
   html = '<!DOCTYPE html>' .. html
-  if mounted then
-    sentSheets = #sheets
+  if P.mounted then
+    P.sentSheets = #sheets
     if not dispatching then
       forgetHTML()
     end
@@ -751,16 +832,16 @@ function M.document(node)
   end
 
   local headers = {}
-  for _, key in ipairs(sortedKeys(mounted.headers)) do
-    headers[#headers + 1] = jsString(key) .. ': ' .. jsString(mounted.headers[key])
+  for _, key in ipairs(sortedKeys(P.mounted.headers)) do
+    headers[#headers + 1] = jsString(key) .. ': ' .. jsString(P.mounted.headers[key])
   end
-  local rpc = mounted.rpc and jsString(mounted.rpc) or 'null'
+  local rpc = P.mounted.rpc and jsString(P.mounted.rpc) or 'null'
   local cfg = '{ rpc: ' .. rpc .. ', headers: { ' .. table.concat(headers, ', ') .. ' } }'
   local script = '<script>' .. CLIENT:format(cfg) .. '</script>'
-  if mounted.morph and mounted.morph.src then
-    script = '<script src="' .. escape(mounted.morph.src) .. '"></script>' .. script
-  elseif mounted.morph then
-    script = '<script>' .. mounted.morph.inline .. '</script>' .. script
+  if P.mounted.morph and P.mounted.morph.src then
+    script = '<script src="' .. escape(P.mounted.morph.src) .. '"></script>' .. script
+  elseif P.mounted.morph then
+    script = '<script>' .. P.mounted.morph.inline .. '</script>' .. script
   end
   local bodyEnd = lastIndex(html, '</body>') or lastIndex(html, '</html>')
   if bodyEnd then

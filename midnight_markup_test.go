@@ -667,3 +667,49 @@ return first, second, third`
 		t.Errorf("second / third\n%s\n%s", second, third)
 	}
 }
+
+// Sessions are pages of their own in one state: separate component state
+// and actions, rendered as `data-mn-<event>` attributes w/o a client script,
+// and they don't disturb the default (mounted) page.
+func TestMidnightMarkupSessions(t *testing.T) {
+	L := NewState()
+	defer L.Close()
+
+	source := `local markup = require('midnight.markup')
+local { state, session } = markup
+local Counter = (props) -> {
+  local st = state({ n = 0 })
+  return <form onsubmit={e -> { st.n += tonumber(e.form.by) }}>
+    <button onclick={() -> { st.n += 1 }}>{props.label} {st.n}</button>
+  </form>
+}
+local a, b = session(), session()
+local first = a:render(() -> <Counter label="a"/>)
+b:render(<Counter label="b"/>)
+local id = first:match('data%-mn%-click="([^"]+)"')
+local submit = first:match('data%-mn%-submit="([^"]+)"')
+assert(a:dispatch(id, {}), 'dispatch a')
+assert(a:dispatch(submit, { form = { by = '10' } }), 'submit a')
+local stale = a:dispatch('r:9#9', {})
+return first, a:rerender(), b:rerender(), tostring(stale), tostring(a:isInteractive()), markup.render(<Counter label="plain"/>)`
+	if err := L.DoMidnightString(source); err != nil {
+		t.Fatal(err)
+	}
+
+	first, a, b, stale, interactive, plain := L.Get(-6).String(), L.Get(-5).String(), L.Get(-4).String(), L.Get(-3).String(), L.Get(-2).String(), L.Get(-1).String()
+	if want := `<form data-midnight="r:1" data-mn-submit="r:1#1"><button data-mn-click="r:1#2">a 0</button></form>`; first != want {
+		t.Errorf("first render\n got %s\nwant %s", first, want)
+	}
+	if !strings.Contains(a, ">a 11</button>") {
+		t.Errorf("session a after actions: %s", a)
+	}
+	if !strings.Contains(b, ">b 0</button>") {
+		t.Errorf("session b should keep its own state: %s", b)
+	}
+	if stale != "false" || interactive != "true" {
+		t.Errorf("stale %s, interactive %s", stale, interactive)
+	}
+	if strings.Contains(plain, "data-mn-") || strings.Contains(plain, "data-midnight") {
+		t.Errorf("a render outside of a session shouldn't have actions: %s", plain)
+	}
+}

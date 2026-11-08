@@ -251,6 +251,28 @@ The host has to run the page and its actions in the same lua state (rest's
 | `mount(root, { rpc, headers, morph })` | makes `root()` the interactive page (actions POST to `rpc`, or the page's own url), returns `root()` |
 | `dispatch(id, data)` | runs an action, returns `{ headers, body }` (what changed) |
 | `isInteractive()` | whether the last render of the mounted page had actions |
+| `session()` | a page of its own (state and actions), for hosts serving many pages from one state (see below) |
+| `s:render(root)` | renders `root()` (or a node) w/ the session's state, actions as `data-mn-<event>="id"` attributes |
+| `s:rerender()` | renders the last root again (ex. after an action) |
+| `s:dispatch(id, data)` | runs an action of the last render, `false` if there's no such action (stale) |
+| `s:isInteractive()` | whether the session's last render had actions |
+
+### Sessions
+
+`mount` makes one page per lua state, which is what a host that runs a state
+per page (like rest) wants. A host that serves many pages from one state (ex.
+a chat bot's panel for each of its viewers) uses a `session()` per page
+instead: each has its own component state and actions, and the host keeps
+them by whatever identifies the page.
+
+Sessions render actions as `data-mn-<event>="id"` attributes (`data-mn-click`,
+`data-mn-submit`, ...) and never include a client script, so they survive
+html sanitizers (which drop `on*` attributes) and the host's own client does
+the rest: find the attribute for an event, send `{ type, value, checked, key,
+form }` (like `mount`'s client), `dispatch` it, and `rerender`.
+
+Rendering isn't reentrant across sessions: render one at a time (a host that
+runs actions concurrently has to serialize renders).
 
 ## Portability
 
