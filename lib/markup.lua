@@ -506,13 +506,18 @@ local CLIENT = [[
 (() => {
   const cfg = %s
   let queue = Promise.resolve()
-  const morph = (from, to) => {
+  // submitted is the focused input of a submitted form, and its value then
+  const morph = (from, to, submitted) => {
     if (window.Idiomorph) {
       // keeps focus, selection, and what's being typed in the focused input.
       // Only for inputs: idiomorph skips the focused element's children, so
       // ex. a clicked (focused) button's text would never update.
       const active = document.activeElement
-      const typing = !!active && active.matches('input, textarea, select, [contenteditable]')
+      let typing = !!active && active.matches('input, textarea, select, [contenteditable]')
+      // a form submitted w/ Enter sent what was typed, so the server's markup
+      // wins (ex. clears the input), like when its button is clicked. Unless
+      // more was typed while the action ran.
+      if (submitted && submitted.el === active && active.value === submitted.value) typing = false
       Idiomorph.morph(from, to, { ignoreActiveValue: typing })
     } else {
       from.replaceWith(to)
@@ -533,6 +538,10 @@ local CLIENT = [[
   window.midnight = {
     rpc(id, e) {
       const data = summarize(e)
+      const active = document.activeElement
+      const submitted = e.type === 'submit' && active && e.target.contains(active)
+        ? { el: active, value: active.value }
+        : null
       queue = queue.then(async () => {
         const res = await fetch(cfg.rpc ?? location.pathname + location.search, {
           method: 'POST',
@@ -545,7 +554,7 @@ local CLIENT = [[
         const page = new DOMParser().parseFromString(html, 'text/html')
         const fragments = page.querySelectorAll('template[data-midnight-target]')
         if (fragments.length === 0) {
-          if (html.trim() !== '') morph(document.body, page.body)
+          if (html.trim() !== '') morph(document.body, page.body, submitted)
           return
         }
         for (const fragment of fragments) {
@@ -553,7 +562,7 @@ local CLIENT = [[
           const target = document.querySelector(`[data-midnight~="${id}"]`)
           const next = fragment.content.firstElementChild
           if (!target || !next) return location.reload()
-          morph(target, next)
+          morph(target, next, submitted)
         }
       }).catch(console.error)
     },

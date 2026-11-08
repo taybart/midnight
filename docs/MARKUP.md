@@ -222,8 +222,11 @@ The host has to run the page and its actions in the same lua state (rest's
 - **Morphing**: updates are applied w/
   [idiomorph](https://github.com/bigskysoftware/idiomorph) (vendored as
   `midnight.markup.idiomorph`, and inlined in the page), so focus, selection, and
-  what's being typed survive. `mount`'s `morph` option can be a url to load it
-  from instead, or `false` to replace elements.
+  what's being typed survive. Except after a submit: the form's values were
+  sent, so its inputs take what the server rendered (ex. `<input name="item"/>`
+  is cleared, `value={st.item}` keeps it), whether it was submitted w/ Enter or
+  a button. `mount`'s `morph` option can be a url to load it from instead, or
+  `false` to replace elements.
 - **Ordering and errors**: actions are sent one at a time, in order. A 410
   response (ex. the server's state for the page is gone) reloads the page.
 - Pages w/o any actions are static: no client script (`isInteractive()` is
