@@ -9,7 +9,7 @@ import (
 	"github.com/taybart/midnight/parse"
 )
 
-const midnightMarkupPrelude = "local { h, render, map, raw, document } = require('midnight.markup')\n"
+const midnightMarkupPrelude = "local { h, render, map, raw, document, cx } = require('midnight.markup')\n"
 
 var midnightMarkupCases = []struct {
 	source string
@@ -25,6 +25,15 @@ var midnightMarkupCases = []struct {
 	{`return render(<input disabled checked={false} value={nil}/>)`, `<input disabled>`},
 	{`return render(<b style={{ color = 'red', ['font-size'] = '2em' }}/>)`, `<b style="color: red; font-size: 2em"></b>`},
 	{`local on = true; return render(<b class={{ 'a', 'b', on = on, off = false }}/>)`, `<b class="a b on"></b>`},
+	// cx joins class names
+	{`return cx()`, ``},
+	{`return cx('a', 'b')`, `a b`},
+	{`return cx('a', false, 'b')`, `a b`},
+	{`return cx({ 'a', 'b' })`, `a b`},
+	{`return cx({ 'a', { 'b', 'c' } })`, `a b c`},
+	{`local on = true; return cx('btn', on && 'on', { 'a', 'b', off = false })`, `btn on a b`},
+	{`return cx(1, 'a')`, `1 a`},
+	{`return render(<b class={cx('a', false, 'b')}/>)`, `<b class="a b"></b>`},
 	{`return render(<b onclick={() -> 1}/>)`, `<b></b>`},
 	// text whitespace (same as JSX)
 	{"return render(<p>\n  hello\n  world\n</p>)", `<p>hello world</p>`},

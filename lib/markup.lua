@@ -322,16 +322,40 @@ local function styleValue(style)
   return table.concat(parts, '; ')
 end
 
--- `class={{ 'btn', 'btn-lg', active = isActive }}`
-local function classValue(class)
-  local parts = {}
-  for _, name in ipairs(class) do
-    if name then parts[#parts + 1] = tostring(name) end
+-- cx(...) joins class names: strings and numbers are kept, `false` / `nil`
+-- are dropped, and a table is flattened (array entries, then truthy string
+-- keys), so conditional and nested classes compose:
+--
+--   class={cx('btn', active && 'on', { 'a', 'b' })}
+--   class={{ 'btn', 'btn-lg', active = isActive }}   -- the class attribute's own table form
+local function appendClass(parts, v)
+  if v == nil or v == false then
+    return
   end
-  for _, key in ipairs(sortedKeys(class)) do
-    if class[key] then parts[#parts + 1] = key end
+  local t = type(v)
+  if t == 'string' or t == 'number' then
+    parts[#parts + 1] = tostring(v)
+  elseif t == 'table' and getmetatable(v) == nil then
+    for _, name in ipairs(v) do
+      appendClass(parts, name)
+    end
+    for _, key in ipairs(sortedKeys(v)) do
+      if v[key] then parts[#parts + 1] = key end
+    end
+  end
+end
+
+function M.cx(...)
+  local parts = {}
+  for i = 1, select('#', ...) do
+    appendClass(parts, (select(i, ...)))
   end
   return table.concat(parts, ' ')
+end
+
+-- `class={{ 'btn', 'btn-lg', active = isActive }}`
+local function classValue(class)
+  return M.cx(class)
 end
 
 -- What's kept for a page between renders. `mount` / `dispatch` use the

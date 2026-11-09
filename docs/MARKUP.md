@@ -111,8 +111,9 @@ pages).
   `map`) render each item.
 - Attributes are rendered sorted (so output is deterministic). `false` / `nil`
   attributes are left out. `class` can be a table (`{ 'btn', active = on }`),
-  as can `style` (`{ color = 'red', ['font-size'] = '2em' }`). Functions are
-  left out (unless they're actions, see below).
+  as can `style` (`{ color = 'red', ['font-size'] = '2em' }`). For composing
+  conditional or nested class names (ex. `class={cx('btn', active && 'on')}`),
+  see `cx(...)`. Functions are left out (unless they're actions, see below).
 - Void elements (`<br>`, `<img>`, ...) can't have children. The text of
   `<script>` and `<style>` isn't escaped.
 
@@ -288,6 +289,7 @@ The host has to run the page and its actions in the same lua state (rest's
 | `raw(html)` | trusted HTML, rendered as is |
 | `map(list, fn)` | list of `fn(value, index)` |
 | `escape(s)` | HTML escaped string |
+| `cx(...)` | joins class names (strings/numbers kept, `false`/`nil` dropped, tables flattened) |
 | `isElement(v)` | whether `v` was built by `h` |
 | `state(init)` | state of the component being rendered |
 | `css(rules)` | scoped styles, returns class names |
