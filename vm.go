@@ -1198,7 +1198,7 @@ func init() {
 					ls.reg.Insert(fn, cf.LocalBase)
 				}
 				if cf.Fn == nil {
-					ls.RaiseError("attempt to call a non-function object")
+					ls.RaiseError("attempt to call a %s value%s", fn.Type().String(), ls.callInfo(fn))
 				}
 				if ls.stack.IsFull() {
 					ls.RaiseError("stack overflow")
@@ -1331,7 +1331,7 @@ func init() {
 				callable, meta = L.metaCall(lv)
 			}
 			if callable == nil {
-				L.RaiseError("attempt to call a non-function object")
+				L.RaiseError("attempt to call a %s value%s", lv.Type().String(), L.callInfo(lv))
 			}
 			// this section is inlined by go-inline
 			// source function is 'func (ls *LState) closeUpvalues(idx int) ' in '_state.go'

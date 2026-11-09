@@ -306,10 +306,11 @@ type varNamePoolValue struct {
 type varNamePool struct {
 	names  []string
 	offset int
+	dbg    []int // midnight: index of each local in Proto.DbgLocals
 }
 
 func newVarNamePool(offset int) *varNamePool {
-	return &varNamePool{make([]string, 0, 16), offset}
+	return &varNamePool{names: make([]string, 0, 16), offset: offset}
 }
 
 func (vp *varNamePool) Names() []string {
@@ -543,6 +544,7 @@ func (fc *funcContext) BlockLocalVarsCount() int {
 
 func (fc *funcContext) RegisterLocalVar(name string) int {
 	ret := fc.Block.LocalVars.Register(name)
+	fc.Block.LocalVars.dbg = append(fc.Block.LocalVars.dbg, len(fc.Proto.DbgLocals))
 	fc.Proto.DbgLocals = append(fc.Proto.DbgLocals, &DbgLocalInfo{Name: name, StartPc: fc.Code.LastPC() + 1})
 	fc.SetRegTop(fc.RegTop() + 1)
 	return ret
@@ -596,9 +598,13 @@ func (fc *funcContext) LeaveBlock() int {
 	return closed
 }
 
+// EndScope ends the scope of the block's locals: they're live from StartPc
+// to EndPc, exclusive. (midnight: by their index in DbgLocals, not their
+// register, which a later local can reuse; and up to the block's last
+// instruction, inclusive.)
 func (fc *funcContext) EndScope() {
-	for _, vr := range fc.Block.LocalVars.List() {
-		fc.Proto.DbgLocals[vr.Index].EndPc = fc.Code.LastPC()
+	for _, i := range fc.Block.LocalVars.dbg {
+		fc.Proto.DbgLocals[i].EndPc = fc.Code.LastPC() + 1
 	}
 }
 

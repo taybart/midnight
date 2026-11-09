@@ -179,7 +179,8 @@ func (fn *LFunction) LocalName(regno, pc int) (string, bool) {
 		return "", false
 	}
 	p := fn.Proto
-	for i := 0; i < len(p.DbgLocals) && p.DbgLocals[i].StartPc < pc; i++ {
+	// midnight: live from StartPc (inclusive) to EndPc, like PUC lua
+	for i := 0; i < len(p.DbgLocals) && p.DbgLocals[i].StartPc <= pc; i++ {
 		if pc < p.DbgLocals[i].EndPc {
 			regno--
 			if regno == 0 {

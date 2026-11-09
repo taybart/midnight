@@ -3,6 +3,11 @@
 > still applies to midnight (import `github.com/taybart/midnight` instead of
 > `github.com/yuin/gopher-lua`). The standalone interpreter is now
 > [`cmd/midnight`](../cmd/midnight).
+>
+> One visible difference: runtime errors name the variable involved, like PUC
+> Lua's (`attempt to call a nil value (local 'f')`, `attempt to index a nil
+> value (field 'repo') with key 'name'`), where gopher-lua says `attempt to
+> call a non-function object` / `attempt to index a non-table object(nil)`.
 
 # GopherLua: VM and compiler for Lua in Go.
 

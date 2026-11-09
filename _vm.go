@@ -605,7 +605,7 @@ func init() {
 				callable, meta = L.metaCall(lv)
 			}
 			if callable == nil {
-				L.RaiseError("attempt to call a non-function object")
+				L.RaiseError("attempt to call a %s value%s", lv.Type().String(), L.callInfo(lv))
 			}
 			// +inline-call L.closeUpvalues lbase
 			if callable.IsG {

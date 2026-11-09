@@ -1137,7 +1137,7 @@ func (ls *LState) pushCallFrame(cf callFrame, fn LValue, meta bool) { // +inline
 		ls.reg.Insert(fn, cf.LocalBase)
 	}
 	if cf.Fn == nil {
-		ls.RaiseError("attempt to call a non-function object")
+		ls.RaiseError("attempt to call a %s value%s", fn.Type().String(), ls.callInfo(fn))
 	}
 	if ls.stack.IsFull() {
 		ls.RaiseError("stack overflow")
@@ -1288,7 +1288,7 @@ func (ls *LState) getField(obj LValue, key LValue) LValue {
 		metaindex := ls.metaOp1(curobj, "__index")
 		if metaindex == LNil {
 			if !istable {
-				ls.RaiseError("attempt to index a non-table object(%v) with key '%s'", curobj.Type().String(), key.String())
+				ls.RaiseError("attempt to index a %v value%s with key '%s'", curobj.Type().String(), ls.indexInfo(curobj), key.String())
 			}
 			return LNil
 		}
@@ -1319,7 +1319,7 @@ func (ls *LState) getFieldString(obj LValue, key string) LValue {
 		metaindex := ls.metaOp1(curobj, "__index")
 		if metaindex == LNil {
 			if !istable {
-				ls.RaiseError("attempt to index a non-table object(%v) with key '%s'", curobj.Type().String(), key)
+				ls.RaiseError("attempt to index a %v value%s with key '%s'", curobj.Type().String(), ls.indexInfo(curobj), key)
 			}
 			return LNil
 		}
@@ -1353,7 +1353,7 @@ func (ls *LState) setField(obj LValue, key LValue, value LValue) {
 		metaindex := ls.metaOp1(curobj, "__newindex")
 		if metaindex == LNil {
 			if !istable {
-				ls.RaiseError("attempt to index a non-table object(%v) with key '%s'", curobj.Type().String(), key.String())
+				ls.RaiseError("attempt to index a %v value%s with key '%s'", curobj.Type().String(), ls.indexInfo(curobj), key.String())
 			}
 			ls.RawSet(tb, key, value)
 			return
@@ -1388,7 +1388,7 @@ func (ls *LState) setFieldString(obj LValue, key string, value LValue) {
 		metaindex := ls.metaOp1(curobj, "__newindex")
 		if metaindex == LNil {
 			if !istable {
-				ls.RaiseError("attempt to index a non-table object(%v) with key '%s'", curobj.Type().String(), key)
+				ls.RaiseError("attempt to index a %v value%s with key '%s'", curobj.Type().String(), ls.indexInfo(curobj), key)
 			}
 			tb.RawSetString(key, value)
 			return
