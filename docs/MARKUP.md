@@ -260,7 +260,9 @@ The host has to run the page and its actions in the same lua state (rest's
   data-midnight-target="id">`, matched to `data-midnight` attributes on the page). The
   whole page is sent when something outside of a component changed, when the
   changed component's root is `<html>` / `<head>` / `<body>`, or when there are
-  new styles. Nothing changed is an empty response.
+  new styles. Nothing changed is an empty response. A page w/o actions
+  never gets updates, so it has no `data-midnight` attributes (and no client
+  script).
 - **Morphing**: updates are applied w/
   [idiomorph](https://github.com/bigskysoftware/idiomorph) (vendored as
   `midnight.markup.idiomorph`, and inlined in the page), so focus, selection, and

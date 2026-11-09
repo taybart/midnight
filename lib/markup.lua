@@ -12,6 +12,10 @@
 
 local M = {}
 
+-- Go helpers midnight passes when it loads this module (w/ plain `require`,
+-- `...` is the module name, and lua versions are used instead).
+local native = type((...)) == 'table' and (...) or {}
+
 -- metatable of elements: { tag, props, children } (an element), or
 -- { component, props } (a component, w/ its children in props.children).
 -- Arrays, not { tag = ..., ... }: a table w/ string keys costs a lot more.
@@ -379,7 +383,7 @@ local current -- { instance, hook } of the component being rendered
 
 -- What each component rendered in the current render (for `dispatch` to send
 -- only what changed): id -> {
---   html,   -- its html
+--   own,    -- its buffer (see flatten), for its html
 --   shell,  -- its html w/ child components replaced by `<!--id-->`, so it
 --           -- only changes if the component's own markup does
 --   parent, -- id of the parent component ('r' for the root)
@@ -387,6 +391,9 @@ local current -- { instance, hook } of the component being rendered
 --           -- `data-midnight`, so the client can find it)
 -- }
 local rendered = {}
+-- The buffers w/ a `data-midnight` attribute in the current render: buffer ->
+-- the attribute's index (see flatten).
+local marked = {}
 -- `rendered` of the last (outermost) render, and the root's shell
 
 -- The component being rendered (or the root): { id, children, nextAction },
@@ -428,6 +435,9 @@ local function renderElement(buf, node, path, owners)
   buf[#buf + 1] = '<' .. tag
   if owners and P.mounted then
     buf[#buf + 1] = ' data-midnight="' .. escape(table.concat(owners, ' ')) .. '"'
+    -- (owners are passed to the first element of a component, so there's
+    -- one per buffer, see flatten)
+    marked[buf] = #buf
     for _, owner in ipairs(owners) do
       if rendered[owner] then
         rendered[owner].tag = tag
@@ -509,13 +519,51 @@ local function renderElement(buf, node, path, owners)
   buf[#buf + 1] = '</' .. tag .. '>'
 end
 
+-- A render's buffers are strings, and the buffers of child components (at
+-- their frame's `children` indices). They're only joined at the end of the
+-- render: until then, it isn't known whether the page has actions, and
+-- `data-midnight` attributes (see `marked`) are only for pages that do.
+
+-- flatten appends the strings of `buf` (and its child components') to `out`,
+-- w/o the `data-midnight` attributes of the buffers in `skip` (if any).
+local function flatten(buf, out, skip)
+  local n = #out
+  local attr = skip and skip[buf]
+  for i = 1, #buf do
+    local part = buf[i]
+    if type(part) == 'table' then
+      flatten(part, out, skip)
+      n = #out
+    elseif i ~= attr then
+      n = n + 1
+      out[n] = part
+    end
+  end
+  return out
+end
+
 -- shell is `buf` w/ the html of child components (at `children` indices)
 -- replaced by markers.
-local function shell(buf, children)
+local shell = native.shell or function(buf, children)
   for i, id in pairs(children) do
     buf[i] = '<!--' .. id .. '-->'
   end
-  return table.concat(buf)
+  local html = table.concat(buf)
+  for i, id in pairs(children) do
+    buf[i] = rendered[id].own
+  end
+  return html
+end
+
+-- join(buf, skip) returns the html of a buffer, w/o the `data-midnight`
+-- attributes of the buffers in `skip` (if any, see flatten).
+local join = native.join or function(buf, skip)
+  return table.concat(flatten(buf, {}, skip))
+end
+
+-- htmlOf returns a component's html (w/ `data-midnight`, for `dispatch`).
+local function htmlOf(entry)
+  return join(entry.own)
 end
 
 local function renderComponent(buf, node, rawText, path, owners)
@@ -545,11 +593,11 @@ local function renderComponent(buf, node, rawText, path, owners)
   local own = {}
   renderTo(own, result, rawText, id, ids)
 
-  entry.html = table.concat(own)
+  entry.own = own
   entry.shell = shell(own, frame.children)
   frame = parentFrame
 
-  buf[#buf + 1] = entry.html
+  buf[#buf + 1] = own
   frame.children[#buf] = id
 end
 
@@ -599,7 +647,7 @@ function M.render(node)
   local root = 'r'
   local parent, parentFrame = current, frame
   if outermost then
-    P.actions, seen, rendered, nestedRenders = {}, {}, {}, 0
+    P.actions, seen, rendered, marked, nestedRenders = {}, {}, {}, {}, 0
     libs, libSeen = {}, {}
   else
     nestedRenders = nestedRenders + 1
@@ -617,7 +665,9 @@ function M.render(node)
     error(err, 0)
   end
 
-  local html = table.concat(buf)
+  -- a nested render can't know yet whether the page has actions, so it
+  -- keeps the attributes
+  local html = join(buf, outermost and next(P.actions) == nil and marked or nil)
   if outermost then
     for id in pairs(P.instances) do
       if not seen[id] then
@@ -957,15 +1007,14 @@ local function lastIndex(s, needle)
   return last
 end
 
--- A component's html (which has its children's html in it) is only needed to
--- send what changed in a response, comparing renders only needs their shells.
--- So once a response is made, its html is dropped (a page w/ a lot of nested
--- components would otherwise keep their html many times over).
+-- A component's html is only needed to send what changed in a response,
+-- comparing renders only needs their shells. So once a response is made, its
+-- buffer is dropped.
 local dispatching = false
 local function forgetHTML()
   if P.lastRender then
     for _, entry in pairs(P.lastRender.instances) do
-      entry.html = nil
+      entry.own = nil
     end
   end
 end
@@ -1011,7 +1060,7 @@ local function changed(before, after)
 
   local out = {}
   for _, id in ipairs(ids) do
-    out[#out + 1] = '<template data-midnight-target="' .. escape(id) .. '">' .. after.instances[id].html .. '</template>'
+    out[#out + 1] = '<template data-midnight-target="' .. escape(id) .. '">' .. htmlOf(after.instances[id]) .. '</template>'
   end
   return table.concat(out)
 end

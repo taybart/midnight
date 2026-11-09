@@ -304,8 +304,19 @@ return page, res.body, res.headers['Content-Type'], dbl .. ' ' .. click, stale`
 
 // dispatch only sends the components whose own markup changed.
 func TestMidnightMarkupFragments(t *testing.T) {
+	for _, plain := range []bool{false, true} {
+		t.Run(map[bool]string{false: "native", true: "plain lua"}[plain], func(t *testing.T) {
+			testMarkupFragments(t, plain)
+		})
+	}
+}
+
+func testMarkupFragments(t *testing.T, plain bool) {
 	L := NewState()
 	defer L.Close()
+	if plain {
+		usePlainMarkup(t, L)
+	}
 
 	source := midnightMarkupActionsPrelude + `local title, note, outside = 'hi', 'n', 'o'
 local Counter = (props) -> {
@@ -536,6 +547,64 @@ return static, tostring(staticInteractive), tostring(markup.isInteractive()), to
 	}
 	if a, b, c := L.Get(-3).String(), L.Get(-2).String(), L.Get(-1).String(); a != "false" || b != "true" || c != "true" {
 		t.Errorf("interactive: %s %s, script: %s", a, b, c)
+	}
+}
+
+// Component roots are only marked (data-midnight) on pages w/ actions: the
+// marks are for updates, which static pages never get.
+func TestMidnightMarkupStaticPageMarks(t *testing.T) {
+	for _, plain := range []bool{false, true} {
+		t.Run(map[bool]string{false: "native", true: "plain lua"}[plain], func(t *testing.T) {
+			testMarkupStaticPageMarks(t, plain)
+		})
+	}
+}
+
+// usePlainMarkup makes require('midnight.markup') load lib/markup.lua like
+// plain lua does (w/ the module name, so w/o midnight's Go helpers).
+func usePlainMarkup(t *testing.T, L *LState) {
+	t.Helper()
+	L.SetGlobal("markupSource", LString(MarkupLibSource))
+	if err := L.DoString(`package.preload['midnight.markup'] = function(name)
+  return assert(loadstring(markupSource, '=markup.lua'))(name)
+end`); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func testMarkupStaticPageMarks(t *testing.T, plain bool) {
+	L := NewState()
+	defer L.Close()
+	if plain {
+		usePlainMarkup(t, L)
+	}
+	source := `local markup = require('midnight.markup')
+local Item = (props) -> <li>{props.name}</li>
+local Inner = () -> <i>in</i>
+-- a nested render can't tell yet whether the page has actions
+local Nested = () -> markup.raw(tostring(<Inner/>))
+local List = (props) -> <ul>{markup.map(props.names, (n) -> <Item key={n} name={n}/>)}<Nested/></ul>
+local App = (props) -> <main><List names={{ 'a', 'b' }}/>{props.live && <button onclick={() -> {}}>x</button>}</main>
+local static = markup.document(markup.mount(() -> <App/>, { rpc = '/' }))
+local live = markup.document(markup.mount(() -> <App live/>, { rpc = '/', morph = false }))
+local s = markup.session()
+local session = s:render(() -> <App/>)
+local sessionLive = s:render(() -> <App live/>)
+return static, live, session, sessionLive`
+	if err := L.DoMidnightString(source); err != nil {
+		t.Fatal(err)
+	}
+	static, live, session, sessionLive := L.Get(-4).String(), L.Get(-3).String(), L.Get(-2).String(), L.Get(-1).String()
+	if want := `<!DOCTYPE html><main><ul><li>a</li><li>b</li><i data-midnight="n1:`; !strings.HasPrefix(static, want) || strings.Count(static, "data-midnight") != 1 {
+		t.Errorf("static page:\n  got  %s\n  want %s...", static, want)
+	}
+	for name, html := range map[string]string{"live": live, "live session": sessionLive} {
+		if !strings.Contains(html, `<main data-midnight="r:`) || !strings.Contains(html, `<li data-midnight="r:1.1:2.1.ka:3"`) {
+			t.Errorf("%s page: missing data-midnight\n%s", name, html)
+		}
+	}
+	if strings.Count(session, "data-midnight") != 1 {
+		t.Errorf("static session:\n%s", session)
 	}
 }
 
