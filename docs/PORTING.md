@@ -104,6 +104,10 @@ reference behavior.
   open `{`, the tokens of the interpolated expression, interpolation close `}`,
   closing delimiter. The parser then treats interpolated expressions like any
   other expression. Track brace depth inside interpolations (`"{ { a = 1 }.a }"`).
+- **Interpolation formats**: at brace depth 0 in an interpolation, `:%`
+  starts a format spec that runs to the closing `}` (one string.format
+  directive, validated in the lexer). The parser emits
+  `string.format(spec, value)` for that part instead of `tostring(value)`.
 - **Escapes**: Lua escapes in quoted strings, plus `\{` / `\}` in double quoted
   and block strings. Single quoted strings don't interpolate (and `\{` is
   invalid there). In block strings, other backslashes are literal.

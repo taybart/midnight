@@ -535,6 +535,14 @@ func (p *midnightParser) stringExpr() ast.Expr {
 			interpolationLine := p.cur.Line
 			p.consume() // {
 			value := p.expression(1)
+			if p.cur.Type == midnightFormatSpec {
+				// `{x:%.2f}` -> string.format('%.2f', x)
+				spec := midnightString(p.cur.Value, p.cur.Line)
+				p.consume()
+				p.expect("}")
+				parts = append(parts, midnightLibCall("string", "format", []ast.Expr{spec, value}, interpolationLine))
+				break
+			}
 			p.expect("}")
 			parts = append(parts, midnightCall(midnightIdent("tostring", interpolationLine), []ast.Expr{value}, interpolationLine))
 		default:

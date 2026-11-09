@@ -49,7 +49,7 @@ integrations and CI).
 ## Language additions
 
 Besides Erde's syntax, Midnight has `match` statements, `if` / `match`
-expressions, and markup elements.
+expressions, interpolation formats, and markup elements.
 Scripts that use them only run on midnight (or as `midnight -c` output).
 
 ### `match`
@@ -136,6 +136,30 @@ or `false` (`if admin { title } else { 'member' }` is `title`, nil or not).
   when its subject starts on the same line and is followed by `{` and an arm
   (`... =>`). So `match - 1` and `local y = match` are names; a unary subject
   needs parentheses (`match (-x) { ... }`).
+
+### Interpolation formats
+
+`{expr:%spec}` formats an interpolated value w/ `string.format`:
+
+```midnight
+print("progress {done / total * 100:%.1f}%")  -- progress 42.0%
+print("id {id:%08x}, {name:%-10s}|")
+```
+
+compiles to
+
+```lua
+print(string.format("%.1f", done / total * 100) .. "%")
+```
+
+- The spec is one `string.format` directive: flags, width, precision, and a
+  conversion (`c d i o x X e E f g G q s`).
+- Only formatted parts call `string.format`; the rest are still
+  `tostring(x)` joined w/ `..`.
+- `:` must be directly followed by `%`. A method name can't start w/ `%`,
+  so `{obj:method()}` is still a method call.
+- Works in double quoted and block strings (which interpolate), not single
+  quoted ones. `\{` escapes the brace as usual.
 
 ### `markup`
 

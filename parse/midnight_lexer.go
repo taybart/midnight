@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"regexp"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -27,6 +28,7 @@ const (
 	midnightBlockString // `[==[` / `]==]` delimiter
 	midnightStringContent
 	midnightInterpolation // `{` / `}` around an interpolated expression
+	midnightFormatSpec    // `%.2f` in `{x:%.2f}`, see formatSpec
 	midnightMarkup        // markup syntax: `<`, `</`, `>`, `/>`, `=`, `{`, `}`
 	midnightMarkupName    // markup tag / attribute name
 	midnightMarkupText    // markup text (cleaned up, see markupText)
@@ -619,6 +621,8 @@ func (lx *midnightLexer) interpolation() {
 			braceDepth--
 			lx.emit(midnightSymbol, "}", lx.line)
 			lx.pos++
+		case braceDepth == 0 && lx.peek(0) == ':' && lx.peek(1) == '%':
+			lx.formatSpec()
 		default:
 			lx.token()
 		}
@@ -626,4 +630,27 @@ func (lx *midnightLexer) interpolation() {
 
 	lx.emit(midnightInterpolation, "}", lx.line)
 	lx.pos++
+}
+
+// midnightFormatSpecPattern is one string.format directive (flags, width,
+// precision, conversion; `%u` isn't supported by the runtime).
+var midnightFormatSpecPattern = regexp.MustCompile(`^%[-+ #0]*[0-9]*(\.[0-9]*)?[cdioxXeEfgGqs]$`)
+
+// formatSpec lexes the `:%spec` at the end of an interpolation, ex.
+// `"{progress:%.2f}"`, which formats the value w/ string.format (a method
+// name can't start w/ `%`, so `{obj:method()}` is still a method call).
+func (lx *midnightLexer) formatSpec() {
+	lx.pos++ // :
+	start := lx.pos
+	for lx.peek(0) != '}' {
+		if lx.eof() || lx.peek(0) == '\n' {
+			lx.throw(lx.line, "unterminated interpolation format")
+		}
+		lx.pos++
+	}
+	spec := lx.text[start:lx.pos]
+	if !midnightFormatSpecPattern.MatchString(spec) {
+		lx.throw(lx.line, "invalid interpolation format '%s' (expected one string.format directive, ex. %%.2f, %%5d, %%x)", spec)
+	}
+	lx.emit(midnightFormatSpec, spec, lx.line)
 }
