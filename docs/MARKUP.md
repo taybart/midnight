@@ -65,12 +65,13 @@ classic runtime:
 | `<div class="card" id={id}>hi {name}</div>` | `h('div', { class = 'card', id = id }, 'hi ', name)` |
 | `<input disabled/>` | `h('input', { disabled = true })` |
 | `<Card {...props} title="x"/>` | `h(Card, <props merged left to right>)` |
-| `<ui.Button/>` | `h(ui.Button, nil)` |
+| `<ui.Button/>` | `h(ui.Button, {})` |
 | `<>a {b}</>` | `h(nil, nil, 'a ', b)` |
 
 - **Tags**: lowercase names, and names w/ `-` or `:` (`my-el`, `svg:path`),
   are HTML elements (strings). Capitalized and dotted names are components
-  (expressions).
+  (expressions). A component that's `nil` (ex. not imported) is an error,
+  not an empty fragment: components always get props (`{}` w/o attributes).
 - **Attributes**: names can have `-`, `:`, `.`, and start w/ `@` or `:`
   (`hx-post`, `@click`, `x-on:click.prevent`). Values are midnight strings (so
   `class="btn {kind}"` interpolates), `{expressions}`, or nothing (`true`).

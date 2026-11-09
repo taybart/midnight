@@ -63,6 +63,10 @@ function M.h(tag, props, ...)
   end
 
   if tag == nil then
+    -- fragments are h(nil, nil, ...): props mean a component that's nil
+    if props ~= nil then
+      error('markup: component is nil (not defined, or not imported?)', 2)
+    end
     return children
   elseif type(tag) == 'string' then
     return setmetatable({ tag = tag, props = props or {}, children = children }, Node)
@@ -107,6 +111,201 @@ local function sortedKeys(t)
   end
   if n > 1 then table.sort(keys) end
   return keys
+end
+
+-- JSON data (for the page's own js) ----------------------------------------
+--
+-- A `<script type="application/json">`'s children are encoded as JSON when
+-- it's rendered, so a page can hand data to its js:
+--
+--   <script type="application/json" id="repos">{repos}</script>
+--   <Data id="repos" value={repos}/>                 -- the same
+--   JSON.parse(document.getElementById('repos').textContent)
+--
+-- The JSON never has a `<`, `>`, or `&` (they're \u escaped), so nothing in
+-- the data can close the <script>. json(v) / jsonText(s) values are already
+-- encoded, and pass through as is.
+
+local Json = {} -- metatable of encoded JSON (safe in a <script>)
+
+-- array(t) / object(t) mark how a table is encoded when that can't be told
+-- from its keys: an empty table could be either, and is an error unmarked.
+local shapes = setmetatable({}, { __mode = 'k' })
+function M.array(t) t = t or {}; shapes[t] = 'array'; return t end
+function M.object(t) t = t or {}; shapes[t] = 'object'; return t end
+
+local JSON_ESCAPES = {
+  ['"'] = '\\"', ['\\'] = '\\\\', ['\b'] = '\\b', ['\f'] = '\\f',
+  ['\n'] = '\\n', ['\r'] = '\\r', ['\t'] = '\\t',
+  ['<'] = '\\u003c', ['>'] = '\\u003e', ['&'] = '\\u0026',
+}
+local function jsonEscape(c)
+  return JSON_ESCAPES[c] or string.format('\\u%04x', c:byte())
+end
+
+local function jsonString(s)
+  if find(s, '[%c"\\<>&\226]') then
+    s = gsub(s, '[%c"\\<>&]', jsonEscape)
+    -- valid JSON, but line terminators in js before ES2019
+    s = gsub(gsub(s, '\226\128\168', '\\u2028'), '\226\128\169', '\\u2029')
+  end
+  return '"' .. s .. '"'
+end
+
+local encodeJson
+
+local function jsonTable(t, out, path, seen)
+  local mt = getmetatable(t)
+  if mt == Json then
+    out[#out + 1] = t[1]
+    return
+  elseif mt == Node or mt == Raw then
+    error('markup: json: can\'t encode an element' .. path, 0)
+  end
+  if seen[t] then
+    error('markup: json: cycle' .. path, 0)
+  end
+  seen[t] = true
+
+  local n, count, strings = #t, 0, true
+  for k in pairs(t) do
+    count = count + 1
+    if type(k) ~= 'string' then strings = false end
+  end
+  local shape = shapes[t]
+  if not shape then
+    if count == 0 then
+      error('markup: json: empty table' .. path .. ' could be [] or {}: use array(t) or object(t)', 0)
+    elseif count == n then
+      shape = 'array'
+    elseif strings then
+      shape = 'object'
+    else
+      error('markup: json: table' .. path .. ' has keys that aren\'t 1..n or all strings', 0)
+    end
+  end
+
+  if shape == 'array' then
+    if count ~= n then
+      error('markup: json: array' .. path .. ' isn\'t a sequence', 0)
+    end
+    out[#out + 1] = '['
+    for i = 1, n do
+      if i > 1 then out[#out + 1] = ',' end
+      encodeJson(t[i], out, path .. '[' .. i .. ']', seen)
+    end
+    out[#out + 1] = ']'
+  else
+    if not strings then
+      error('markup: json: object' .. path .. ' has non-string keys', 0)
+    end
+    local keys = {}
+    for k in pairs(t) do keys[#keys + 1] = k end
+    table.sort(keys) -- deterministic output
+    out[#out + 1] = '{'
+    for i, k in ipairs(keys) do
+      if i > 1 then out[#out + 1] = ',' end
+      out[#out + 1] = jsonString(k)
+      out[#out + 1] = ':'
+      encodeJson(t[k], out, path .. '.' .. k, seen)
+    end
+    out[#out + 1] = '}'
+  end
+  seen[t] = nil
+end
+
+function encodeJson(v, out, path, seen)
+  local t = type(v)
+  if v == nil then
+    out[#out + 1] = 'null'
+  elseif t == 'boolean' then
+    out[#out + 1] = v and 'true' or 'false'
+  elseif t == 'number' then
+    if v ~= v or v == math.huge or v == -math.huge then
+      error('markup: json: ' .. tostring(v) .. path .. ' isn\'t a JSON number', 0)
+    end
+    if v == math.floor(v) and v > -2^53 and v < 2^53 then
+      out[#out + 1] = string.format('%d', v)
+    else
+      local short = string.format('%.14g', v)
+      out[#out + 1] = tonumber(short) == v and short or string.format('%.17g', v)
+    end
+  elseif t == 'string' then
+    out[#out + 1] = jsonString(v)
+  elseif t == 'table' then
+    jsonTable(v, out, path, seen)
+  else
+    error('markup: json: can\'t encode a ' .. t .. path, 0)
+  end
+end
+
+-- json(v) encodes a value as JSON (see above), for a JSON <script>.
+function M.json(v)
+  if getmetatable(v) == Json then return v end
+  local out = {}
+  encodeJson(v, out, '', {})
+  return setmetatable({ table.concat(out) }, Json)
+end
+
+-- jsonText(s) is JSON encoded by the host (ex. Go's encoding/json), trusted to
+-- be valid and to have no `<` (like raw, it's rendered as is).
+function M.jsonText(s)
+  return setmetatable({ tostring(s) }, Json)
+end
+
+-- <Data id="x" value={v}/> is <script type="application/json" id="x">{v}</script>.
+function M.Data(props)
+  return M.h('script', { type = 'application/json', id = props.id }, M.json(props.value))
+end
+
+-- <script define:vars={{ name = value }}> declares each name in the script, as if
+-- it started w/ `const name = <value>;`:
+--
+--   <script define:vars={{ repos = props.repos }}>
+--     const hits = repos.filter(r => r.name.includes(q))
+--   </script>
+--
+-- Values are encoded like json(v) and parsed in the browser
+-- (JSON.parse('...'), which is faster than a js literal for big data, and
+-- has no `__proto__` surprises). The JSON has no `<`, and is in a js string,
+-- so nothing in the data can close the <script>.
+local JS_RESERVED = {}
+for word in ([[break case catch class const continue debugger default delete do
+  else enum export extends false finally for function if import in instanceof
+  new null return super switch this throw true try typeof var void while with
+  yield let static implements interface package private protected public
+  await arguments eval undefined NaN Infinity]]):gmatch('%S+') do
+  JS_RESERVED[word] = true
+end
+
+local function defineVars(data)
+  if type(data) ~= 'table' or getmetatable(data) ~= nil then
+    error('markup: <script define:vars={...}> takes a table of names to values', 0)
+  end
+  local names = {}
+  for name in pairs(data) do
+    if type(name) ~= 'string' or not find(name, '^[%a_$][%w_$]*$') or JS_RESERVED[name] then
+      error('markup: <script define:vars={...}>: ' .. tostring(name) .. ' isn\'t a js variable name', 0)
+    end
+    names[#names + 1] = name
+  end
+  table.sort(names)
+  local out = {}
+  for _, name in ipairs(names) do
+    local ok, encoded = pcall(M.json, data[name])
+    if not ok then
+      error((gsub(encoded, '^markup: json: ', 'markup: <script define:vars={...}>: ' .. name .. ': ')), 0)
+    end
+    -- in a '...' js string, JSON only needs \ and ' escaped (it has no
+    -- line terminators or `<`)
+    local js = gsub(gsub(encoded[1], '\\', '\\\\'), "'", "\\'")
+    out[#out + 1] = 'const ' .. name .. " = JSON.parse('" .. js .. "');\n"
+  end
+  return table.concat(out)
+end
+
+local function isJsonScript(tag, props)
+  return tag == 'script' and props.type == 'application/json'
 end
 
 -- `style={{ color = 'red', ['font-size'] = '2em' }}`
@@ -219,6 +418,11 @@ local renderTo
 -- `data-midnight` on mounted pages).
 local function renderElement(buf, node, path, owners)
   local tag, props = node.tag, node.props
+  local vars = props['define:vars']
+  if vars ~= nil and tag ~= 'script' then
+    error('markup: define:vars only works on a <script> (it\'s on a <' .. tag .. '>)', 0)
+  end
+  local prelude = vars ~= nil and vars ~= false and defineVars(vars)
   buf[#buf + 1] = '<' .. tag
   if owners and P.mounted then
     buf[#buf + 1] = ' data-midnight="' .. escape(table.concat(owners, ' ')) .. '"'
@@ -246,7 +450,7 @@ local function renderElement(buf, node, path, owners)
       else
         buf[#buf + 1] = ' on' .. event .. '="midnight.rpc(' .. jsString(id) .. ', event)"'
       end
-    elseif key == 'children' or key == 'key' or value == nil or value == false or type(value) == 'function' then
+    elseif key == 'children' or key == 'key' or (prelude and key == 'define:vars') or value == nil or value == false or type(value) == 'function' then
       -- skipped (functions are event handlers, which only mean something in
       -- the browser, see `mount`)
     elseif value == true then
@@ -272,6 +476,26 @@ local function renderElement(buf, node, path, owners)
 
   -- text is rendered here: it doesn't need a path (only components do)
   local children, rawText = node.children, RAW_TEXT[tag]
+  if prelude then
+    buf[#buf + 1] = prelude
+  end
+  if isJsonScript(tag, props) then
+    local empty = true
+    for i = 1, #children do
+      local child = children[i]
+      if child ~= false and child ~= true then
+        buf[#buf + 1] = M.json(child)[1]
+        empty = false
+      end
+    end
+    if empty then
+      -- `{x}` w/ x nil (h keeps nil children as false): null, so
+      -- JSON.parse gets JSON
+      buf[#buf + 1] = 'null'
+    end
+    buf[#buf + 1] = '</script>'
+    return
+  end
   for i = 1, #children do
     local child = children[i]
     if type(child) == 'string' then
@@ -342,7 +566,7 @@ function renderTo(buf, node, rawText, path, owners)
       renderComponent(buf, node, rawText, path, owners)
     elseif mt == Node then
       renderElement(buf, node, path, owners)
-    elseif mt == Raw then
+    elseif mt == Raw or mt == Json then
       buf[#buf + 1] = node[1]
     elseif mt ~= nil and mt.__tostring then
       renderTo(buf, tostring(node), rawText, path)
@@ -877,5 +1101,6 @@ M.escape = escape
 
 Node.__tostring = M.render
 Raw.__tostring = function(self) return self[1] end
+Json.__tostring = function(self) return self[1] end
 
 return M

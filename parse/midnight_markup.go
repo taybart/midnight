@@ -1,6 +1,7 @@
 package parse
 
 import (
+	"regexp"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -15,7 +16,7 @@ import (
 //	h('div', { class = 'card', id = id }, 'hi ', name)
 //
 //	<Card {...props} title="x"/>   h(Card, <props merged left to right>)
-//	<ui.Button/>                   h(ui.Button, nil)
+//	<ui.Button/>                   h(ui.Button, {})
 //	<>a {b}</>                     h(nil, nil, 'a ', b)
 //
 // `h` is whatever `h` is in scope. When there isn't one, it's imported from
@@ -122,6 +123,7 @@ func (lx *midnightLexer) markupElement() {
 
 	lx.markupName()
 	tag := lx.tokens[len(lx.tokens)-1].Value
+	jsonScript := false // <script type="application/json">, see markupJSON
 
 	for {
 		lx.markupSpace()
@@ -134,7 +136,9 @@ func (lx *midnightLexer) markupElement() {
 		case c == '>':
 			lx.emit(midnightMarkup, ">", lx.line)
 			lx.pos++
-			if markupRawTextTags[tag] {
+			if jsonScript {
+				lx.markupJSON()
+			} else if markupRawTextTags[tag] {
 				lx.markupRawText(tag)
 			}
 			lx.markupChildren()
@@ -143,6 +147,7 @@ func (lx *midnightLexer) markupElement() {
 			lx.markupExpression()
 		case isMarkupNameHead(c):
 			lx.markupName()
+			attr := lx.tokens[len(lx.tokens)-1].Value
 			lx.markupSpace()
 			if lx.peek(0) != '=' {
 				continue
@@ -150,11 +155,14 @@ func (lx *midnightLexer) markupElement() {
 			lx.emit(midnightMarkup, "=", lx.line)
 			lx.pos++
 			lx.markupSpace()
+			valueStart := lx.pos
 			switch lx.peek(0) {
 			case '"':
 				lx.doubleQuoteString()
+				jsonScript = jsonScript || tag == "script" && attr == "type" && lx.text[valueStart:lx.pos] == `"application/json"`
 			case '\'':
 				lx.singleQuoteString()
+				jsonScript = jsonScript || tag == "script" && attr == "type" && lx.text[valueStart:lx.pos] == `'application/json'`
 			case '{':
 				lx.markupExpression()
 			default:
@@ -183,6 +191,35 @@ func (lx *midnightLexer) markupRawText(tag string) {
 	lx.line += strings.Count(text, "\n")
 	if strings.TrimSpace(text) != "" {
 		lx.emit(midnightMarkupText, text, startLine)
+	}
+}
+
+// markupJSONText is the start of JSON text (`{"key":`), which would otherwise
+// be a confusing syntax error in the expression.
+var markupJSONText = regexp.MustCompile(`^\{\s*("[^"\n]*"|'[^'\n]*')\s*:`)
+
+// markupJSON lexes the content of a `<script type="application/json">`: one
+// `{expression}`, which the runtime encodes as JSON when it's rendered (so
+// unlike other scripts, it isn't raw text).
+func (lx *midnightLexer) markupJSON() {
+	space := func() {
+		for !lx.eof() && strings.IndexByte(" \t\r\n", lx.peek(0)) >= 0 {
+			if lx.peek(0) == '\n' {
+				lx.line++
+			}
+			lx.pos++
+		}
+	}
+	space()
+	if markupJSONText.MatchString(lx.text[lx.pos:]) {
+		lx.throw(lx.line, `a <script type="application/json"> holds one {expression}, encoded as JSON, not JSON text (write a table: {{ a = 1 }})`)
+	}
+	if lx.peek(0) == '{' {
+		lx.markupExpression()
+		space()
+	}
+	if lx.peek(0) != '<' || lx.peek(1) != '/' {
+		lx.throw(lx.line, `a <script type="application/json"> holds one {expression}, encoded as JSON (ex. {data})`)
 	}
 }
 
@@ -428,7 +465,16 @@ func (p *midnightParser) markupElement() ast.Expr {
 	}
 
 	name := p.consume()
-	args := []ast.Expr{p.markupTag(name, line), p.markupAttributes(line)}
+	tag, props := p.markupTag(name, line), p.markupAttributes(line)
+	if _, isString := tag.(*ast.StringExpr); !isString {
+		if _, isNil := props.(*ast.NilExpr); isNil {
+			// components always get props, so an undefined one (`<Foo/>`
+			// w/ no Foo) isn't h(nil, nil), which is a fragment: the
+			// runtime can tell them apart, and raise an error
+			props = midnightLine(&ast.TableExpr{}, line)
+		}
+	}
+	args := []ast.Expr{tag, props}
 
 	if p.isMarkup("/>") {
 		p.consume()
