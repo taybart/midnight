@@ -713,3 +713,46 @@ return first, a:rerender(), b:rerender(), tostring(stale), tostring(a:isInteract
 		t.Errorf("a render outside of a session shouldn't have actions: %s", plain)
 	}
 }
+
+// elements: components for a library's custom elements, which a page that
+// uses any of them loads (once) in its <head>.
+func TestMidnightMarkupElements(t *testing.T) {
+	L := NewState()
+	defer L.Close()
+	source := `local markup = require('midnight.markup')
+local ui = markup.elements('/static/ui.js', { CopyButton = 'ui-copy', Modal = 'ui-modal' })
+local other = markup.elements('/static/other.js', { Thing = 'x-thing' })
+local page = (body) -> <html><head><title>t</title></head><body>{body}</body></html>
+local used = markup.document(page(<>
+  <ui.CopyButton src="/raw?a=1&b=2"><button>copy</button></ui.CopyButton>
+  <ui.CopyButton src="/b"/>
+  <ui.Modal/>
+</>))
+local none = markup.document(page(<p/>))
+local ok, err = pcall(markup.elements, '/x.js', { Bad = 'nodash' })
+local ok2, err2 = pcall(markup.elements, '/x.js', { Bad = 'Has-Caps' })
+return used, none, markup.scripts(), err, err2`
+	if err := L.DoMidnightString(source); err != nil {
+		t.Fatal(err)
+	}
+	used, none, after, bad, caps := L.Get(-5).String(), L.Get(-4).String(), L.Get(-3).String(), L.Get(-2).String(), L.Get(-1).String()
+	if !strings.Contains(used, `<ui-copy src="/raw?a=1&amp;b=2"><button>copy</button></ui-copy><ui-copy src="/b"></ui-copy><ui-modal></ui-modal>`) {
+		t.Errorf("elements\n%s", used)
+	}
+	if n := strings.Count(used, `<script type="module">`); n != 1 {
+		t.Errorf("want one script for the library, got %d\n%s", n, used)
+	}
+	if strings.Contains(used, "other.js") {
+		t.Errorf("unused library loaded\n%s", used)
+	}
+	want := `<script type="module">import * as m from '/static/ui.js'; const src = '/static/ui.js'; `
+	if !strings.Contains(used, "<title>t</title>"+want) || !strings.Contains(used, `r('ui-copy', 'CopyButton'); r('ui-modal', 'Modal');</script></head>`) {
+		t.Errorf("script\n%s", used)
+	}
+	if strings.Contains(none, "<script") || after != "" {
+		t.Errorf("page w/o elements: %s / %s", none, after)
+	}
+	if !strings.Contains(bad, "nodash is not a custom element name") || !strings.Contains(caps, "Has-Caps is not a custom element name") {
+		t.Errorf("errors: %s / %s", bad, caps)
+	}
+}

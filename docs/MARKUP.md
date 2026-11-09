@@ -187,6 +187,47 @@ local s = css({
   the same rules are only added once). For per-instance values, use the
   `style` attribute.
 
+## Custom elements
+
+Behavior on the client is plain js, as [custom elements](https://developer.mozilla.org/en-US/docs/Web/API/Web_components/Using_custom_elements).
+`elements(src, tags)` returns components for the elements of a js module (a
+library), by name:
+
+```midnight
+-- elements.mn: the page's element library
+local { elements } = require('midnight.markup')
+return elements('/static/elements.js', {
+  CopyButton = 'got-copy',
+  BlameButton = 'got-blame',
+})
+```
+
+```js
+// /static/elements.js: exports each element's class under its name
+export { default as CopyButton } from './elements/copy-button.js'
+export { default as BlameButton } from './elements/blame-button.js'
+```
+
+```midnight
+local { CopyButton } = require('elements')
+<CopyButton src={url}><button>copy</button></CopyButton>
+```
+
+- The components render their tag, w/ their props as attributes, and their
+  children (rendered by the server, so the element can wire them up).
+- A page that uses any of a library's elements loads it once: `document` adds
+  a `<script type="module">` to the `<head>` (after any importmap there), which
+  imports the library and registers all of its elements. `scripts()` returns
+  them, to put them somewhere else. Pages w/o elements load nothing.
+- A class w/ a static `register(tag)` (ex. a base class that also adds its
+  styles) is registered w/ it, others w/ `customElements.define`. A name the
+  module doesn't export is an error in the browser's console.
+- Tags have to be valid custom element names (lowercase, w/ a `-`), or
+  `elements` errors. The tag is only named here, so the js doesn't need it.
+- On interactive pages, a library that's only used after an action isn't
+  loaded (updates don't run scripts): use one of its elements on the first
+  render.
+
 ## Interactive pages
 
 On a mounted page, functions in `on*` attributes (`onclick`, `onClick`, and
@@ -249,6 +290,8 @@ The host has to run the page and its actions in the same lua state (rest's
 | `state(init)` | state of the component being rendered |
 | `css(rules)` | scoped styles, returns class names |
 | `styles()` | all styles, as a `<style>` (or `''`) |
+| `elements(src, tags)` | components for the custom elements of a js module, by name (see above) |
+| `scripts()` | the module scripts of the element libraries used in the last render (or `''`) |
 | `mount(root, { rpc, headers, morph })` | makes `root()` the interactive page (actions POST to `rpc`, or the page's own url), returns `root()` |
 | `dispatch(id, data)` | runs an action, returns `{ headers, body }` (what changed) |
 | `isInteractive()` | whether the last render of the mounted page had actions |

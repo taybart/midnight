@@ -374,6 +374,7 @@ end
 -- `state`). Instances that aren't rendered again are dropped after each
 -- render.
 local seen = {} -- ids rendered in the current render
+local libs, libSeen = {}, {} -- element libraries used in the current render (see `elements`)
 local current -- { instance, hook } of the component being rendered
 
 -- What each component rendered in the current render (for `dispatch` to send
@@ -599,6 +600,7 @@ function M.render(node)
   local parent, parentFrame = current, frame
   if outermost then
     P.actions, seen, rendered, nestedRenders = {}, {}, {}, 0
+    libs, libSeen = {}, {}
   else
     nestedRenders = nestedRenders + 1
     root = 'n' .. nestedRenders
@@ -763,6 +765,66 @@ function M.styles()
     return ''
   end
   return '<style data-midnight-css>\n' .. table.concat(sheets, '\n') .. '\n</style>'
+end
+
+-- Custom elements: `elements(src, tags)` returns components for the custom
+-- elements of a js module (a library), by name. They render their tag (w/
+-- their props as attributes, and their children), and a page that uses any of
+-- them loads the library once (`document` adds a module script to the <head>,
+-- `scripts()` returns them), which registers all of its elements:
+--
+--   local { CopyButton } = elements('/static/elements.js', { CopyButton = 'got-copy' })
+--   <CopyButton src={url}><button>copy</button></CopyButton>
+--
+-- The module exports each element's class under its name. A class w/ a static
+-- `register(tag)` is registered w/ it, others w/ `customElements.define`.
+-- Tags are valid custom element names (lowercase, w/ a `-`).
+local REGISTER = "const r = (t, n) => { const C = m[n]; " ..
+  "if (!C) throw new Error('elements: ' + n + ' (' + t + ') is not exported by ' + src); " ..
+  "C.register ? C.register(t) : customElements.get(t) || customElements.define(t, C) };"
+
+function M.elements(src, tags)
+  assert(type(src) == 'string', 'markup: elements requires the url of a js module')
+  assert(type(tags) == 'table', 'markup: elements requires a table of tags, by name')
+  local lib = { src = src, tags = {} }
+  local components = {}
+  for _, name in ipairs(sortedKeys(tags)) do
+    local tag = tags[name]
+    if type(tag) ~= 'string' or not tag:match('^%l[%l%d._%-]*%-[%l%d._%-]*$') then
+      error('markup: elements: ' .. tostring(name) .. ' = ' .. tostring(tag) ..
+        ' is not a custom element name (lowercase, w/ a -)', 2)
+    end
+    lib.tags[#lib.tags + 1] = { name, tag }
+    components[name] = function(props)
+      if not libSeen[lib] then
+        libSeen[lib] = true
+        libs[#libs + 1] = lib
+      end
+      local attrs = {}
+      for k, v in pairs(props) do
+        if k ~= 'children' then
+          attrs[k] = v
+        end
+      end
+      return setmetatable({ tag, attrs, props.children or {} }, Node)
+    end
+  end
+  return components
+end
+
+-- scripts() returns the module scripts that load the element libraries used
+-- in the last render (or '' if none).
+function M.scripts()
+  local out = {}
+  for _, lib in ipairs(libs) do
+    local calls = {}
+    for i, t in ipairs(lib.tags) do
+      calls[i] = 'r(' .. jsString(t[2]) .. ', ' .. jsString(t[1]) .. ');'
+    end
+    out[#out + 1] = '<script type="module">import * as m from ' .. jsString(lib.src) ..
+      '; const src = ' .. jsString(lib.src) .. '; ' .. REGISTER .. ' ' .. table.concat(calls, ' ') .. '</script>'
+  end
+  return table.concat(out)
 end
 
 -- Client side of actions: calls the rpc endpoint w/ the action id and a
@@ -1056,7 +1118,7 @@ end
 -- mounted page w/ actions, it includes the client script.
 function M.document(node)
   local html = M.render(node)
-  local styles = M.styles()
+  local styles = M.styles() .. M.scripts()
   if styles ~= '' then
     local headEnd = html:find('</head>', 1, true)
     local _, htmlStart = html:find('^%s*<html[^>]*>')
