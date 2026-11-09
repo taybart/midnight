@@ -242,6 +242,24 @@ func (tb *LTable) RawSetString(key string, value LValue) {
 // when Next needs it, or a key is deleted: until then, every key in keys is
 // in the table, so a key is new if the table doesn't have it. (gopher-lua
 // made a k2i map for every table w/ a hash part.)
+// smallKeys is the most keys a table finds a key's position in by scanning
+// them (w/o allocating k2i, faster than hashing at this size).
+const smallKeys = 8
+
+// keyIndex returns key's position in keys (0 if it isn't there, like k2i).
+func (tb *LTable) keyIndex(key LValue) int {
+	if tb.k2i == nil && len(tb.keys) <= smallKeys {
+		for i, k := range tb.keys {
+			if k == key {
+				return i
+			}
+		}
+		return 0
+	}
+	tb.indexKeys()
+	return tb.k2i[key]
+}
+
 func (tb *LTable) indexKeys() {
 	if tb.k2i != nil {
 		return
@@ -412,8 +430,7 @@ func (tb *LTable) Next(key LValue) (LValue, LValue) {
 		}
 	}
 
-	tb.indexKeys()
-	for i := tb.k2i[key] + 1; i < len(tb.keys); i++ {
+	for i := tb.keyIndex(key) + 1; i < len(tb.keys); i++ {
 		key := tb.keys[i]
 		if v := tb.RawGetH(key); v != LNil {
 			return key, v
