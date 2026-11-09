@@ -26,6 +26,9 @@ const (
 	// a `=>` function that builds markup elements and doesn't use self:
 	// probably a component, whose props would be `self`
 	RuleFatArrowComponent = "fat-arrow-component"
+	// `a && b || c` where b can be nil or false: it's then c, even when a is
+	// true (use an if expression)
+	RuleAndOr = "and-or"
 )
 
 type Diagnostic struct {
@@ -321,6 +324,7 @@ func (c *checker) expr(expr ast.Expr) {
 		}
 		c.exprs(ex.Args)
 	case *ast.LogicalOpExpr:
+		c.andOr(ex)
 		c.expr(ex.Lhs)
 		c.expr(ex.Rhs)
 	case *ast.RelationalOpExpr:
@@ -363,3 +367,109 @@ func (c *checker) function(fn *ast.FunctionExpr, isMethod bool) {
 }
 
 /* }}} */
+
+// andOr reports `a && b || c` (`a and b or c`) when b can be nil or false,
+// since it's then c even when a is true.
+func (c *checker) andOr(ex *ast.LogicalOpExpr) {
+	if ex.Operator != "or" {
+		return
+	}
+	and, ok := ex.Lhs.(*ast.LogicalOpExpr)
+	if !ok || and.Operator != "and" || alwaysTruthy(and.Rhs) {
+		return
+	}
+	switch ex.Rhs.(type) {
+	case *ast.NilExpr, *ast.FalseExpr:
+		return // `a && b || nil`: a falsy b gives a falsy value anyway
+	}
+	if guards(and.Lhs, and.Rhs) {
+		return // `x && x.y || default`: falling back is the point
+	}
+	switch and.Rhs.(type) {
+	case *ast.NilExpr, *ast.FalseExpr:
+		c.report(ex.Line(), RuleAndOr, "'a && nil || c' (or false) is always c (use an if expression: if a { nil } else { c })")
+	default:
+		c.report(ex.Line(), RuleAndOr, "'a && b || c' is c when b is nil or false, even if a is true (use an if expression: if a { b } else { c })")
+	}
+}
+
+// alwaysTruthy returns whether an expression can't be nil or false.
+func alwaysTruthy(expr ast.Expr) bool {
+	switch ex := expr.(type) {
+	case *ast.StringExpr, *ast.NumberExpr, *ast.TrueExpr, *ast.TableExpr, *ast.FunctionExpr,
+		*ast.StringConcatOpExpr, *ast.ArithmeticOpExpr, *ast.UnaryMinusOpExpr, *ast.UnaryLenOpExpr:
+		return true
+	case *ast.FuncCallExpr:
+		if ex.Element { // a markup element
+			return true
+		}
+		name := chainKey(ex.Func)
+		return strings.HasPrefix(name, "math.") || valueFuncs[name]
+	case *ast.LogicalOpExpr:
+		// `x || 'default'`
+		return ex.Operator == "or" && alwaysTruthy(ex.Rhs)
+	}
+	return false
+}
+
+// valueFuncs are standard functions that always return a string or number.
+var valueFuncs = map[string]bool{
+	"tostring": true, "table.concat": true, "string.format": true, "string.rep": true,
+	"string.sub": true, "string.upper": true, "string.lower": true, "string.reverse": true,
+	"string.len": true, "string.char": true, "os.time": true, "os.clock": true,
+}
+
+// chainKey returns a name or field chain as a string (`a.b.c`), or "".
+func chainKey(expr ast.Expr) string {
+	switch ex := expr.(type) {
+	case *ast.IdentExpr:
+		return ex.Value
+	case *ast.AttrGetExpr:
+		key, ok := ex.Key.(*ast.StringExpr)
+		if !ok {
+			return ""
+		}
+		if base := chainKey(ex.Object); base != "" {
+			return base + "." + key.Value
+		}
+	}
+	return ""
+}
+
+// guards returns whether b is an access on what a checks (`x && x.y`,
+// `x && x:m()`, `x && f(x)`, `x != nil && x.y`): the safe navigation idiom,
+// where falling back when b is nil is intended.
+func guards(a, b ast.Expr) bool {
+	if rel, ok := a.(*ast.RelationalOpExpr); ok && rel.Operator == "~=" {
+		if _, isNil := rel.Rhs.(*ast.NilExpr); isNil {
+			a = rel.Lhs
+		}
+	}
+	guarded := chainKey(a)
+	if guarded == "" {
+		return false
+	}
+	on := func(expr ast.Expr) bool {
+		key := chainKey(expr)
+		return key == guarded || strings.HasPrefix(key, guarded+".")
+	}
+	switch ex := b.(type) {
+	case *ast.AttrGetExpr:
+		return on(ex.Object)
+	case *ast.FuncCallExpr:
+		if ex.Receiver != nil && on(ex.Receiver) {
+			return true
+		}
+		if ex.Func != nil {
+			if attr, ok := ex.Func.(*ast.AttrGetExpr); ok && on(attr.Object) {
+				return true
+			}
+		}
+		for _, arg := range ex.Args {
+			if on(arg) {
+				return true
+			}
+		}
+	}
+	return false
+}

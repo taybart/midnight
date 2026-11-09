@@ -51,6 +51,12 @@ var midnightCondCases = []struct {
 	{`return ('abc'):match('b')`, `b`},
 	{`local s = 'abc'; return s:match('c') .. string.match(s, 'a')`, `ca`},
 	{`local t = { match = 'm' }; return t.match`, `m`},
+	{`local match = 5; local y = match - 1; return tostring(y)`, `4`},
+	{"local match = 5\nlocal y = match\nlocal z = 1\nreturn tostring(y + z)", `6`},
+	{`local match = 5; return tostring(match > 1) .. tostring(match)`, `true5`},
+	{`local match = 2; local t = { match, match * 2 }; return tostring(t[2])`, `4`},
+	{`local x = -2; return match (-x) { 2 => { 'two' } _ => { '?' } }`, `two`},
+	{`return match "s" { "s" => { 'str' } _ => { '?' } }`, `str`},
 	// statements are unchanged
 	{`local r = ''; if true { r = 'stmt' } else { r = 'no' }; return r`, `stmt`},
 	{`local r = ''; match 2 { 2 => { r = 'stmt' } }; return r`, `stmt`},

@@ -98,27 +98,74 @@ func (p *midnightParser) ifExpression() ast.Expr {
 }
 
 // isMatchExpression checks for a match expression (where an expression is
-// expected). Like the statement (see isMatchStatement), `match` is only a
-// keyword when what follows can't continue a name.
+// expected). `match` is a name everywhere else, so it's only a match when it
+// can't be one: the subject starts on the same line (a word, number, string,
+// or `(`), and is followed by `{` and an arm (`... =>`). So `match - 1`,
+// `match + x`, and `local y = match` (w/ the next statement on the next line)
+// are still names. A unary subject needs parentheses: `match (-x) {`.
 func (p *midnightParser) isMatchExpression() bool {
 	if p.cur.Type != midnightWord || !p.is("match") {
 		return false
 	}
 
 	next := p.tokens[p.index+1]
-	if next.Type != midnightSymbol {
-		return next.Type != midnightEOF
+	if next.Line != p.cur.Line {
+		return false
+	}
+	switch next.Type {
+	case midnightWord:
+		if midnightKeywords[next.Value] {
+			return false
+		}
+	case midnightNumber, midnightSingleQuote, midnightDoubleQuote, midnightBlockString:
+	default:
+		if !isMidnightSyntax(next, "(") {
+			return false
+		}
 	}
 
-	switch next.Value {
-	case "(":
-		// `match(x)` is a call, `match (x) {` is a match expression.
-		past, _ := p.lookPastSurround(p.index + 1)
-		return isMidnightSyntax(past, "{")
-	case "-", "!", "#", "~":
-		return true // `match -x {`
+	// past the subject to the arms' `{`
+	i := p.index + 1
+	for {
+		token := p.tokens[i]
+		switch {
+		case token.Type == midnightEOF:
+			return false
+		case token.Type != midnightSymbol:
+			i++
+			continue
+		case token.Value == "{":
+			return p.isMatchArm(i + 1)
+		case token.Value == "}" || token.Value == ";" || token.Value == "=" || token.Value == ",":
+			return false
+		case midnightSurroundEnds[token.Value] != "":
+			_, i = p.lookPastSurround(i)
+		default:
+			i++
+		}
 	}
-	return false // `match.x`, `match:f()`, `match + 1`, `match {...}` (a call), ...
+}
+
+// isMatchArm checks for a match arm's `=>` from tokens[i] (before any `{` /
+// `}`, outside of surrounds).
+func (p *midnightParser) isMatchArm(i int) bool {
+	for {
+		token := p.tokens[i]
+		switch {
+		case token.Type == midnightEOF:
+			return false
+		case token.Type != midnightSymbol:
+			i++
+		case token.Value == "=>":
+			return true
+		case token.Value == "{", token.Value == "}":
+			return false
+		case midnightSurroundEnds[token.Value] != "":
+			_, i = p.lookPastSurround(i)
+		default:
+			i++
+		}
+	}
 }
 
 // matchExpression parses `match s { a | b => { x } _ if g => { y } _ => { z } }`.

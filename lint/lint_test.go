@@ -26,6 +26,30 @@ func TestLint(t *testing.T) {
 		source string
 		want   []string
 	}{
+		// a && b || c where b can be nil or false
+		{"local a, b = true, nil\nprint(a && b || 'c')", []string{"2:and-or"}},
+		{"local a, t = true, {}\nprint(a && t.name || 'c')", []string{"2:and-or"}},
+		{"local a, f = true, () -> 1\nprint(a && f() || 'c')", []string{"2:and-or"}},
+		{"local a, x = true, 1\nprint(a && x == 1 || 'c')", []string{"2:and-or"}}, // false is falsy too
+		{"local a = true\nprint(a && nil || 'c')", []string{"2:and-or"}},
+		{"local a = true\nprint(a && false || 'c')", []string{"2:and-or"}},
+		// ... but not when b can't be
+		{"local a = true\nprint(a && 'x' || 'c', a && 1 || 2, a && {} || {}, a && true || false)", nil},
+		// safe navigation: falling back when b is nil is the point
+		{"local x, f = {}, (v) -> v\nprint(x && x.y || 'd', x && x.y.z || 'd', x && x:m() || 'd', x && f(x) || 0, x != nil && x.y || 'd')", nil},
+		{"local c = {}\nprint(c.a && c.a.b || 'd')", nil},
+		// ... but a different field is still reported
+		{"local c = {}\nprint(c.current && c.name || 'link')", []string{"2:and-or"}},
+		// standard functions that always return a value
+		{"local n, s = 1, 's'\nprint(n > 0 && math.floor(n) || 0, n && tostring(n) || '', s && string.format('%s', s) || '')", nil},
+		// a nil / false fallback is what a falsy b would give anyway
+		{"local a, b = true, nil\nprint(a && b || nil, a && b || false)", nil},
+		{"local a, n, s = true, 2, 's'\nprint(a && n + 1 || 0, a && s .. '!' || '', a && #s || 0, a && -n || 0)", nil},
+		{"local a, n = true, nil\nprint(a && (n || 'default') || 'c')", nil},
+		{"local a = true\nprint(a && <b/> || <i/>, a && (() -> 1) || nil)", nil},
+		{"local a, b = true, nil\nprint(a && b, a || b, if a { b } else { 'c' })", nil},
+		// (match patterns and guards lower to and / or, and aren't reported)
+		{"local k, g = 1, true\nmatch k { 1 | 2 if g => { print(k) } _ => {} }", nil},
 		// unused locals
 		{"local x = 1", []string{"1:unused-local"}},
 		{"local x = 1\nprint(x)", nil},
