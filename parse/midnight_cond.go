@@ -100,9 +100,9 @@ func (p *midnightParser) ifExpression() ast.Expr {
 // isMatchExpression checks for a match expression (where an expression is
 // expected). `match` is a name everywhere else, so it's only a match when it
 // can't be one: the subject starts on the same line (a word, number, string,
-// or `(`), and is followed by `{` and an arm (`... =>`). So `match - 1`,
-// `match + x`, and `local y = match` (w/ the next statement on the next line)
-// are still names. A unary subject needs parentheses: `match (-x) {`.
+// `(`, or a unary operator), and is followed by `{` and an arm (`... =>`). So
+// `match - 1`, `match + x`, and `local y = match` (w/ the next statement on
+// the next line) are still names, and `match #rows { 0 => ... }` is a match.
 func (p *midnightParser) isMatchExpression() bool {
 	if p.cur.Type != midnightWord || !p.is("match") {
 		return false
@@ -119,7 +119,10 @@ func (p *midnightParser) isMatchExpression() bool {
 		}
 	case midnightNumber, midnightSingleQuote, midnightDoubleQuote, midnightBlockString:
 	default:
-		if !isMidnightSyntax(next, "(") {
+		switch {
+		case isMidnightSyntax(next, "("), isMidnightSyntax(next, "#"), isMidnightSyntax(next, "!"),
+			isMidnightSyntax(next, "-"), isMidnightSyntax(next, "~"):
+		default:
 			return false
 		}
 	}

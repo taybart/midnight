@@ -134,8 +134,8 @@ or `false` (`if admin { title } else { 'member' }` is `title`, nil or not).
 - At the start of a statement, `if` / `match` are still statements.
 - `match` is still a name where it can be one: it's a match expression only
   when its subject starts on the same line and is followed by `{` and an arm
-  (`... =>`). So `match - 1` and `local y = match` are names; a unary subject
-  needs parentheses (`match (-x) { ... }`).
+  (`... =>`). So `match - 1` and `local y = match` are names, and
+  `match #rows { ... }` is a match.
 
 ### Interpolation formats
 

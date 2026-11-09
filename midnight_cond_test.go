@@ -56,6 +56,9 @@ var midnightCondCases = []struct {
 	{`local match = 5; return tostring(match > 1) .. tostring(match)`, `true5`},
 	{`local match = 2; local t = { match, match * 2 }; return tostring(t[2])`, `4`},
 	{`local x = -2; return match (-x) { 2 => { 'two' } _ => { '?' } }`, `two`},
+	{`local x = 2; return match -x { -2 => { 'neg' } _ => { '?' } }`, `neg`},
+	{`local t = { 1, 2 }; return match #t { 0 => { 'empty' } _ => { "{#t} rows" } }`, `2 rows`},
+	{`local ok = false; return match !ok { true => { 'not ok' } _ => { 'ok' } }`, `not ok`},
 	{`return match "s" { "s" => { 'str' } _ => { '?' } }`, `str`},
 	// statements are unchanged
 	{`local r = ''; if true { r = 'stmt' } else { r = 'no' }; return r`, `stmt`},
