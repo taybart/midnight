@@ -1,7 +1,10 @@
 package lua
 
-const defaultArrayCap = 32
-const defaultHashCap = 32
+// midnight: tables start small (they grow as needed): most are small (ex.
+// markup elements and their props), and gopher-lua's 32 slot defaults made
+// each one allocate ~1-2KB.
+const defaultArrayCap = 4
+const defaultHashCap = 0
 
 type lValueArraySorter struct {
 	L      *LState
@@ -186,7 +189,7 @@ func (tb *LTable) RawSetInt(key int, value LValue) {
 		return
 	}
 	if tb.array == nil {
-		tb.array = make([]LValue, 0, 32)
+		tb.array = make([]LValue, 0, defaultArrayCap)
 	}
 	index := key - 1
 	alen := len(tb.array)
@@ -209,21 +212,43 @@ func (tb *LTable) RawSetString(key string, value LValue) {
 	if tb.strdict == nil {
 		tb.strdict = make(map[string]LValue, defaultHashCap)
 	}
-	if tb.keys == nil {
-		tb.keys = []LValue{}
-		tb.k2i = map[LValue]int{}
-	}
 
 	if value == LNil {
 		// TODO tb.keys and tb.k2i should also be removed
-		delete(tb.strdict, key)
-	} else {
-		tb.strdict[key] = value
+		if _, ok := tb.strdict[key]; ok {
+			tb.indexKeys() // (so a deleted key keeps its place in keys)
+			delete(tb.strdict, key)
+		}
+		return
+	}
+	// a key is new if it isn't in keys (see indexKeys)
+	if tb.k2i != nil {
 		lkey := LString(key)
 		if _, ok := tb.k2i[lkey]; !ok {
 			tb.k2i[lkey] = len(tb.keys)
 			tb.keys = append(tb.keys, lkey)
 		}
+	} else if _, ok := tb.strdict[key]; !ok {
+		tb.keys = append(tb.keys, LString(key))
+	}
+	tb.strdict[key] = value
+}
+
+// indexKeys builds k2i (the index of each key in keys, for Next), if it isn't
+// built yet.
+//
+// midnight: keys (the hash keys in the order they were added, so Next
+// iterates in that order) is kept as keys are added, but k2i is only built
+// when Next needs it, or a key is deleted: until then, every key in keys is
+// in the table, so a key is new if the table doesn't have it. (gopher-lua
+// made a k2i map for every table w/ a hash part.)
+func (tb *LTable) indexKeys() {
+	if tb.k2i != nil {
+		return
+	}
+	tb.k2i = make(map[LValue]int, len(tb.keys))
+	for i, key := range tb.keys {
+		tb.k2i[key] = i
 	}
 }
 
@@ -235,23 +260,26 @@ func (tb *LTable) RawSetH(key LValue, value LValue) {
 		return
 	}
 	if tb.dict == nil {
-		tb.dict = make(map[LValue]LValue, len(tb.strdict))
-	}
-	if tb.keys == nil {
-		tb.keys = []LValue{}
-		tb.k2i = map[LValue]int{}
+		tb.dict = make(map[LValue]LValue)
 	}
 
 	if value == LNil {
 		// TODO tb.keys and tb.k2i should also be removed
-		delete(tb.dict, key)
-	} else {
-		tb.dict[key] = value
+		if _, ok := tb.dict[key]; ok {
+			tb.indexKeys() // (so a deleted key keeps its place in keys)
+			delete(tb.dict, key)
+		}
+		return
+	}
+	if tb.k2i != nil {
 		if _, ok := tb.k2i[key]; !ok {
 			tb.k2i[key] = len(tb.keys)
 			tb.keys = append(tb.keys, key)
 		}
+	} else if _, ok := tb.dict[key]; !ok {
+		tb.keys = append(tb.keys, key)
 	}
+	tb.dict[key] = value
 }
 
 // RawGet returns an LValue associated with a given key without __index metamethod.
@@ -384,6 +412,7 @@ func (tb *LTable) Next(key LValue) (LValue, LValue) {
 		}
 	}
 
+	tb.indexKeys()
 	for i := tb.k2i[key] + 1; i < len(tb.keys); i++ {
 		key := tb.keys[i]
 		if v := tb.RawGetH(key); v != LNil {

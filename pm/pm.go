@@ -631,6 +631,8 @@ func Find(p string, src []byte, offset, limit int) (matches []*MatchData, err er
 	switch {
 	case prog.lit != nil:
 		return prog.findLiteral(src, offset, limit), nil
+	case prog.set != nil:
+		return prog.findSet(src, offset, limit), nil
 	case prog.re != nil && !(prog.wide && hasHighByte(src, offset)):
 		return prog.findRegexp(src, offset, limit), nil
 	}

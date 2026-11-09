@@ -258,3 +258,65 @@ func TestTableConcat(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// pairs iterates hash keys in the order they were added (rest's json.encode
+// relies on it), w/ deleted keys keeping their place (see indexKeys).
+func TestTableKeyOrder(t *testing.T) {
+	L := NewState()
+	defer L.Close()
+	err := L.DoString(`
+		local function keys(t)
+			local out = {}
+			for k in pairs(t) do out[#out + 1] = tostring(k) end
+			return table.concat(out, ',')
+		end
+
+		local t = {}
+		t.c = 1; t.a = 2; t.b = 3
+		assert(keys(t) == 'c,a,b', keys(t))
+
+		-- re-setting a key doesn't move it
+		t.a = 20
+		assert(keys(t) == 'c,a,b', keys(t))
+
+		-- a deleted key keeps its place when it's added back
+		t.a = nil
+		assert(keys(t) == 'c,b', keys(t))
+		t.d = 4; t.a = 5
+		assert(keys(t) == 'c,a,b,d', keys(t))
+
+		-- deleting before any iteration
+		local u = {}
+		u.x = 1; u.y = 2; u.x = nil; u.z = 3; u.x = 4
+		assert(keys(u) == 'x,y,z', keys(u))
+
+		-- non-string keys, and the array part first
+		local k1, k2 = {}, {}
+		local m = { 'one', 'two' }
+		m[k1] = 1; m.s = 2; m[2.5] = 3; m[k2] = 4
+		local seen = {}
+		for k, v in pairs(m) do seen[#seen + 1] = type(k) .. ':' .. tostring(v) end
+		assert(table.concat(seen, ',') == 'number:one,number:two,table:1,string:2,number:3,table:4', table.concat(seen, ','))
+
+		-- assigning existing fields while iterating (allowed in Lua)
+		local w = { a = 1, b = 2, c = 3 }
+		local n = 0
+		for k, v in pairs(w) do w[k] = v * 10; n = n + 1 end
+		assert(n == 3 and w.a == 10 and w.b == 20 and w.c == 30)
+
+		-- clearing fields while iterating (also allowed)
+		local cnt = 0
+		for k in pairs(w) do w[k] = nil; cnt = cnt + 1 end
+		assert(cnt == 3 and next(w) == nil)
+
+		-- big tables still work
+		local big = {}
+		for i = 1, 1000 do big['k' .. i] = i end
+		local total = 0
+		for _, v in pairs(big) do total = total + v end
+		assert(total == 500500)
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+}

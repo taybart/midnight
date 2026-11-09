@@ -12,6 +12,9 @@ import (
 //
 //   - literal: a pattern that's only plain characters (ex. `<a `,
 //     `news%.ycombinator%.com`) is a byte search (bytes.Index)
+//   - set: a pattern that's one class (ex. `[&<>"']`, `%s`, `[^%w_]`) is a
+//     scan for the first byte in it (a table of the bytes it matches, made
+//     w/ the class itself, so it matches exactly what the VM does)
 //   - regexp: most other patterns translate to an equivalent Go regexp
 //     (RE2's leftmost-first matching w/ greedy / lazy repeats is what the
 //     backtracking VM does, as Lua patterns have no alternation)
@@ -28,6 +31,7 @@ type program struct {
 	insts []inst
 
 	lit  []byte         // the pattern's bytes, if it's literal
+	set  *[256]bool     // the bytes it matches, if it's one class
 	re   *regexp.Regexp // the pattern as a regexp, if it translates
 	wide bool           // re has classes that can match bytes >= 0x80
 	pos  []bool         // per capture: is it a position capture `()`
@@ -67,6 +71,10 @@ func compileProgram(p string) *program {
 		prog.lit = lit
 		return prog
 	}
+	if set, ok := byteSet(pat); ok {
+		prog.set = set
+		return prog
+	}
 	t := &translator{}
 	if t.seq(pat) {
 		expr := "(?s)" + t.b.String()
@@ -101,6 +109,23 @@ func literal(pat *seqPattern) ([]byte, bool) {
 		lit = append(lit, byte(ch))
 	}
 	return lit, true
+}
+
+// byteSet returns the bytes a pattern that's one class (w/o anchors or
+// repeats) matches.
+func byteSet(pat *seqPattern) (*[256]bool, bool) {
+	if pat.MustHead || pat.MustTail || len(pat.Patterns) != 1 {
+		return nil, false
+	}
+	sp, ok := pat.Patterns[0].(*singlePattern)
+	if !ok {
+		return nil, false
+	}
+	set := &[256]bool{}
+	for b := range set {
+		set[b] = sp.Class.Matches(b)
+	}
+	return set, true
 }
 
 // literalChar returns the one byte a class matches: `x`, or an escaped
@@ -311,6 +336,27 @@ func (prog *program) findLiteral(src []byte, offset, limit int) []*MatchData {
 		}
 		matches = append(matches, &MatchData{[]uint32{uint32(start) << 1, uint32(start+len(prog.lit)) << 1}})
 		sp = start + len(prog.lit)
+		if len(matches) == limit {
+			break
+		}
+	}
+	return matches
+}
+
+// findSet is findVM for a one class pattern: each match is the next byte in
+// its set.
+func (prog *program) findSet(src []byte, offset, limit int) []*MatchData {
+	matches := []*MatchData{}
+	for sp := offset; sp < len(src); {
+		start := sp
+		for start < len(src) && !prog.set[src[start]] {
+			start++
+		}
+		if start == len(src) || !limitAt(&limit, sp, start) {
+			break
+		}
+		matches = append(matches, &MatchData{[]uint32{uint32(start) << 1, uint32(start+1) << 1}})
+		sp = start + 1
 		if len(matches) == limit {
 			break
 		}

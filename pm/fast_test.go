@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"reflect"
+	"regexp"
 	"testing"
 )
 
@@ -40,6 +41,8 @@ func checkSame(t *testing.T, p string, src []byte, offset, limit int) {
 		engine := "vm"
 		if prog.lit != nil {
 			engine = "literal"
+		} else if prog.set != nil {
+			engine = "set"
 		} else if prog.re != nil {
 			engine = "regexp " + prog.re.String()
 		}
@@ -74,6 +77,14 @@ func TestFastPaths(t *testing.T) {
 		{"%z", "a\x00b"},
 		{"[%z]", "a\x00b"},
 		{"%f[%w]%w+", "hello world"},
+		{`[&<>"']`, `a < b && c > "d" 'e'`},
+		{`[&<>"']`, "nothing to escape"},
+		{"%s", "a b\tc\nd"},
+		{"[^%w_]", "foo_bar-baz.qux"},
+		{"[%c\"\\<>&]", "x\x01y\"z\\<&>"},
+		{".", "aé\xff"},
+		{"[^a]", "aé\xff"},
+		{"%A", "a1é"},
 	}
 	for _, c := range cases {
 		for offset := 0; offset <= len(c.src)+1; offset++ {
@@ -112,7 +123,7 @@ func TestFastPathsRandom(t *testing.T) {
 			}()
 			return compileProgram(p), nil
 		}()
-		if err == nil && (prog.lit != nil || prog.re != nil) {
+		if err == nil && (prog.lit != nil || prog.set != nil || prog.re != nil) {
 			n++
 		}
 		offset := 0
@@ -141,5 +152,13 @@ func BenchmarkLiteralFast(b *testing.B) { benchFind(b, "news%.ycombinator%.com&#
 func BenchmarkLiteralVM(b *testing.B)   { benchFind(b, "news%.ycombinator%.com&#x2F;item%?id=", true) }
 func BenchmarkRegexpFast(b *testing.B)  { benchFind(b, `href="([^"]*)"`, false) }
 func BenchmarkRegexpVM(b *testing.B)    { benchFind(b, `href="([^"]*)"`, true) }
-func BenchmarkWordsFast(b *testing.B)   { benchFind(b, `%a+`, false) }
-func BenchmarkWordsVM(b *testing.B)     { benchFind(b, `%a+`, true) }
+func BenchmarkSetFast(b *testing.B)     { benchFind(b, `[&<>"']`, false) }
+func BenchmarkSetRegexp(b *testing.B) {
+	prog := compileProgram(`[&<>"']`)
+	prog.set, prog.re = nil, regexp.MustCompile(`(?s)[&<>"']`) // (what it ran on before)
+	for i := 0; i < b.N; i++ {
+		prog.findRegexp(benchSrc, 0, -1)
+	}
+}
+func BenchmarkWordsFast(b *testing.B) { benchFind(b, `%a+`, false) }
+func BenchmarkWordsVM(b *testing.B)   { benchFind(b, `%a+`, true) }

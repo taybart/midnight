@@ -12,7 +12,10 @@
 
 local M = {}
 
-local Node = {} -- metatable of elements
+-- metatable of elements: { tag, props, children } (an element), or
+-- { component, props } (a component, w/ its children in props.children).
+-- Arrays, not { tag = ..., ... }: a table w/ string keys costs a lot more.
+local Node = {}
 local Raw = {} -- metatable of trusted HTML
 
 local VOID = {
@@ -53,13 +56,11 @@ end
 -- condition doesn't change the position (and so the state) of the children
 -- after it.
 function M.h(tag, props, ...)
-  local children, n, args = {}, select('#', ...), { ... }
-  for i = 1, n do
-    local child = args[i]
-    if child == nil then
-      child = false
+  local children = { ... }
+  for i = 1, select('#', ...) do
+    if children[i] == nil then
+      children[i] = false
     end
-    children[i] = child
   end
 
   if tag == nil then
@@ -69,11 +70,11 @@ function M.h(tag, props, ...)
     end
     return children
   elseif type(tag) == 'string' then
-    return setmetatable({ tag = tag, props = props or {}, children = children }, Node)
+    return setmetatable({ tag, props or {}, children }, Node)
   elseif isCallable(tag) then
     props = props or {}
     props.children = children
-    return setmetatable({ component = tag, props = props }, Node)
+    return setmetatable({ tag, props }, Node)
   end
 
   error('markup: invalid element type (' .. type(tag) .. ')', 2)
@@ -405,9 +406,9 @@ end
 
 -- slot is the path of the `i`th child of `path`.
 local function slot(path, i, child)
-  if getmetatable(child) == Node and child.props.key ~= nil then
+  if getmetatable(child) == Node and child[2].key ~= nil then
     -- no spaces, ids are space separated in `data-midnight`
-    return path .. '.k' .. tostring(child.props.key):gsub('%s', '_')
+    return path .. '.k' .. tostring(child[2].key):gsub('%s', '_')
   end
   return path .. '.' .. i
 end
@@ -417,7 +418,7 @@ local renderTo
 -- `owners` are the ids of the components whose root is this element (in
 -- `data-midnight` on mounted pages).
 local function renderElement(buf, node, path, owners)
-  local tag, props = node.tag, node.props
+  local tag, props = node[1], node[2]
   local vars = props['define:vars']
   if vars ~= nil and tag ~= 'script' then
     error('markup: define:vars only works on a <script> (it\'s on a <' .. tag .. '>)', 0)
@@ -466,7 +467,7 @@ local function renderElement(buf, node, path, owners)
   buf[#buf + 1] = '>'
 
   if VOID[tag] then
-    for _, child in ipairs(node.children) do
+    for _, child in ipairs(node[3]) do
       if child ~= false and child ~= true then
         error('markup: <' .. tag .. '> can\'t have children', 0)
       end
@@ -475,7 +476,7 @@ local function renderElement(buf, node, path, owners)
   end
 
   -- text is rendered here: it doesn't need a path (only components do)
-  local children, rawText = node.children, RAW_TEXT[tag]
+  local children, rawText = node[3], RAW_TEXT[tag]
   if prelude then
     buf[#buf + 1] = prelude
   end
@@ -517,7 +518,7 @@ local function shell(buf, children)
 end
 
 local function renderComponent(buf, node, rawText, path, owners)
-  local id = path .. ':' .. componentId(node.component)
+  local id = path .. ':' .. componentId(node[1])
   seen[id] = true
   local instance = P.instances[id]
   if not instance then
@@ -530,7 +531,7 @@ local function renderComponent(buf, node, rawText, path, owners)
   local parent, parentFrame = current, frame
   current = { instance = instance, hook = 0 }
   frame = { id = id, children = {}, nextAction = 0 }
-  local ok, result = pcall(node.component, node.props)
+  local ok, result = pcall(node[1], node[2])
   current = parent
   if not ok then
     error(result, 0)
@@ -562,7 +563,7 @@ function renderTo(buf, node, rawText, path, owners)
     buf[#buf + 1] = tostring(node)
   elseif t == 'table' then
     local mt = getmetatable(node)
-    if mt == Node and node.component then
+    if mt == Node and type(node[1]) ~= 'string' then
       renderComponent(buf, node, rawText, path, owners)
     elseif mt == Node then
       renderElement(buf, node, path, owners)
