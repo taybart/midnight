@@ -48,7 +48,8 @@ integrations and CI).
 
 ## Language additions
 
-Besides Erde's syntax, Midnight has `match` statements and markup elements.
+Besides Erde's syntax, Midnight has `match` statements, `if` / `match`
+expressions, and markup elements.
 Scripts that use them only run on midnight (or as `midnight -c` output).
 
 ### `match`
@@ -88,7 +89,49 @@ end
   At the start of a statement, `match` followed by `=`, `,`, `.`, `[`, `:`, an
   assignment operator, or a call (`match(x)`) is still a name; `match (x) {` is
   a match statement.
-- Statement only (not an expression).
+- Where an expression is expected, it's a [match expression](#if--match-expressions).
+
+### `if` / `match` expressions
+
+Where an expression is expected, `if` and `match` have a value: the value of
+the branch that's taken.
+
+```midnight
+local label = if user.admin { user.title } else { 'member' }
+
+local icon = match entry.kind {
+  "dir" => { "📁" }
+  "link" | "submodule" => { "🔗" }
+  _ => { "📄" }
+}
+
+<nav>{if c.current { c.name } else { <a href="/{c.path}">{c.name}</a> }}</nav>
+```
+
+Unlike `cond && a || b`, the branch taken is the value even when it's `nil`
+or `false` (`if admin { title } else { 'member' }` is `title`, nil or not).
+
+- Each branch is one expression, truncated to one value (like parentheses).
+  For statements, use an `if` / `match` statement.
+- The fallback is required (`else`, `_ =>`), so a missing case is never a
+  silent `nil`. `elseif` chains, and `match` patterns, `|`, and guards are the
+  same as the statements'.
+- As the (first) value of a declaration or assignment, or of a `return`
+  (including an arrow function's expression body), they compile to an if
+  chain, at no cost:
+
+  ```lua
+  -- local label = if user.admin { user.title } else { 'member' }
+  local tmp
+  if user.admin then tmp = user.title else tmp = "member" end
+  local label = tmp
+  ```
+
+  Anywhere else (ex. an argument, a table field, a markup child), the if
+  chain is in a function that's called right away, which allocates a closure
+  each time it runs. In a hot loop, prefer a local:
+  `local label = if ... ; f(label)`.
+- At the start of a statement, `if` / `match` are still statements.
 
 ### `markup`
 

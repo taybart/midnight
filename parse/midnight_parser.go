@@ -87,6 +87,9 @@ type midnightParser struct {
 	// Local holding the automatic markup factory (see markupFactory), or "" if
 	// unused.
 	markupRuntime string
+	// if / match expressions, by the expression they were parsed to, so they
+	// can be lowered to statements where they're used (see midnight_cond.go).
+	conds map[ast.Expr]*midnightCond
 
 	isVarargs           bool
 	isModuleReturnBlock bool
@@ -642,6 +645,9 @@ func (p *midnightParser) returnStmt() ast.Stmt {
 		}
 	}
 
+	if stmt := p.returnCond(exprs, line); stmt != nil {
+		return stmt
+	}
 	return midnightLine(&ast.ReturnStmt{Exprs: exprs}, line)
 }
 
@@ -771,7 +777,11 @@ func (p *midnightParser) arrowFunction() ast.Expr {
 		} else {
 			exprs = append(exprs, p.expression(1))
 		}
-		body = []ast.Stmt{midnightLine(&ast.ReturnStmt{Exprs: exprs}, returnLine)}
+		if stmt := p.returnCond(exprs, returnLine); stmt != nil {
+			body = []ast.Stmt{stmt}
+		} else {
+			body = []ast.Stmt{midnightLine(&ast.ReturnStmt{Exprs: exprs}, returnLine)}
+		}
 		lastLine = p.prevLine()
 	}
 
@@ -881,6 +891,13 @@ func (p *midnightParser) terminalExpression() ast.Expr {
 			p.consume()
 			return midnightLine(&ast.Comma3Expr{}, line)
 		}
+	}
+
+	if p.cur.Type == midnightWord && p.is("if") {
+		return p.ifExpression()
+	}
+	if p.isMatchExpression() {
+		return p.matchExpression()
 	}
 
 	isArrowFunction := p.isArrow(p.index + 1)
@@ -1321,7 +1338,12 @@ func (p *midnightParser) variableAssignment(first *midnightChain, line int) []as
 		for i, id := range ids {
 			lhs[i] = id.expr
 		}
-		return []ast.Stmt{midnightLine(&ast.AssignStmt{Lhs: lhs, Rhs: exprs}, line)}
+		assign := midnightLine(&ast.AssignStmt{Lhs: lhs, Rhs: exprs}, line)
+		if hoisted := p.hoistCond(exprs, line); hoisted != nil {
+			// scope the temporary local
+			return []ast.Stmt{midnightLine(&ast.DoBlockStmt{Stmts: append(hoisted, assign)}, line)}
+		}
+		return []ast.Stmt{assign}
 	}
 
 	var stmts []ast.Stmt
@@ -1378,7 +1400,7 @@ func (p *midnightParser) variableDeclaration(scope string, line int) []ast.Stmt 
 	}
 
 	exprs := p.expressionList()
-	stmts := []ast.Stmt{}
+	stmts := append([]ast.Stmt{}, p.hoistCond(exprs, line)...)
 
 	if len(destructures) > 0 {
 		declared := []string{}

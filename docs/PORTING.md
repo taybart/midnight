@@ -165,6 +165,9 @@ Midnight additions (not in Erde, see the README):
 | Midnight | Lua |
 | --- | --- |
 | `match s { a \| b => { X } _ if g => { Y } _ => { Z } }` | `do local tmp = s if tmp == a or tmp == b then X elseif g then Y else Z end end` |
+| `local v = if c { a } elseif d { b } else { x }` (an expression) | `local tmp if c then tmp = a elseif d then tmp = b else tmp = x end local v = tmp` |
+| `local v = match s { p => { a } _ => { x } }` (an expression) | `local tmp do local s2 = s if s2 == p then tmp = a else tmp = x end end local v = tmp` |
+| `f(if c { a } else { b })` (anywhere else) | `f((function(...) if c then return a else return b end end)(...))` (`...` when the enclosing function has varargs) |
 
 Prefer contextual keywords over reserved ones, so Erde code keeps working: `match`
 is only a keyword at the start of a statement when the next token can't
