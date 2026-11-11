@@ -71,7 +71,23 @@ Not reported:
 - The implicit `self` of `=>` functions and `:` methods, when shadowed.
 - Names made up by the Midnight parser (ex. for `continue`, `match`, destructuring).
 - Standard globals (Lua 5.1 - 5.5, LuaJIT, and midnight's `bit32` / `channel`).
-  Add others (ex. ones the host program provides) w/ `-g name,name`.
+  Add others (ex. ones the host program provides) w/ `-g name,name`, or w/ a
+  `.luarc.json` (below).
+
+Globals are also read from the nearest `.luarc.json` (lua-language-server's
+config, looked up from each file's directory), so editor and linter agree:
+
+- `diagnostics.globals`: names listed directly.
+- `workspace.library`: `*.lua` files (or directories of them, relative to the
+  `.luarc.json`) whose top-level globals count as defined, ex. a `---@meta`
+  definitions file w/ `harmony = {}` or `function fetch(url) end`.
+
+```json
+{
+  "workspace.library": ["../src/bots/lua_definitions"],
+  "diagnostics.globals": ["provided_by_host"]
+}
+```
 
 A comment containing `midnight-lint: ignore` silences its line:
 

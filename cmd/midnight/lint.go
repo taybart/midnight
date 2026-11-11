@@ -36,6 +36,11 @@ Rules:
   syntax            the file doesn't parse
 
 Add '` + lintIgnoreComment + `' in a comment to ignore a line.
+
+Globals are also read from the nearest .luarc.json (lua-language-server's
+config): names in 'diagnostics.globals', and the top-level globals defined by
+the *.lua files in 'workspace.library'.
+
 Available options are:
   -g list  additional globals, comma separated (ex. ones set by the host)
   -markup-factory name
@@ -71,6 +76,7 @@ func lintCommand(args []string) int {
 		paths = []string{"."}
 	}
 
+	luarcs := luarcCache{}
 	problems := 0
 	for _, root := range paths {
 		if root == "-" {
@@ -79,7 +85,12 @@ func lintCommand(args []string) int {
 				fmt.Println(err.Error())
 				return 1
 			}
-			problems += lintSource(source, "<stdin>", true, midnightOpts, lintOpts)
+			opts, err := luarcs.options(".", lintOpts)
+			if err != nil {
+				fmt.Println(err.Error())
+				return 1
+			}
+			problems += lintSource(source, "<stdin>", true, midnightOpts, opts)
 			continue
 		}
 
@@ -90,7 +101,7 @@ func lintCommand(args []string) int {
 		}
 
 		if !info.IsDir() {
-			problems += lintFile(root, !strings.HasSuffix(root, ".lua"), midnightOpts, lintOpts)
+			problems += lintFile(root, !strings.HasSuffix(root, ".lua"), midnightOpts, lintOpts, luarcs)
 			continue
 		}
 
@@ -99,7 +110,7 @@ func lintCommand(args []string) int {
 				return err
 			}
 			if !d.IsDir() && parse.IsMidnightPath(path) {
-				problems += lintFile(path, true, midnightOpts, lintOpts)
+				problems += lintFile(path, true, midnightOpts, lintOpts, luarcs)
 			}
 			return nil
 		})
@@ -115,13 +126,39 @@ func lintCommand(args []string) int {
 	return 0
 }
 
-func lintFile(path string, isMidnight bool, midnightOpts parse.MidnightOptions, lintOpts lint.Options) int {
+func lintFile(path string, isMidnight bool, midnightOpts parse.MidnightOptions, lintOpts lint.Options, luarcs luarcCache) int {
 	source, err := os.ReadFile(path)
 	if err != nil {
 		fmt.Println(err.Error())
 		return 1
 	}
-	return lintSource(source, path, isMidnight, midnightOpts, lintOpts)
+	opts, err := luarcs.options(filepath.Dir(path), lintOpts)
+	if err != nil {
+		fmt.Println(err.Error())
+		return 1
+	}
+	return lintSource(source, path, isMidnight, midnightOpts, opts)
+}
+
+// luarcCache holds the globals of each .luarc.json seen, by path.
+type luarcCache map[string][]string
+
+// options adds the globals from the .luarc.json nearest dir (if any) to opts.
+func (c luarcCache) options(dir string, opts lint.Options) (lint.Options, error) {
+	path := lint.FindLuarc(dir)
+	if path == "" {
+		return opts, nil
+	}
+	globals, ok := c[path]
+	if !ok {
+		var err error
+		if globals, err = lint.LuarcGlobals(path); err != nil {
+			return opts, err
+		}
+		c[path] = globals
+	}
+	opts.Globals = append(append([]string{}, opts.Globals...), globals...)
+	return opts, nil
 }
 
 // lintSource prints the problems in a file, returning how many there were.
