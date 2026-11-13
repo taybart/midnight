@@ -41,6 +41,7 @@ var luaLibs = []luaLib{
 	luaLib{CoroutineLibName, OpenCoroutine},
 	luaLib{Bit32LibName, OpenBit32},   // midnight
 	luaLib{MarkupLibName, OpenMarkup}, // midnight
+	luaLib{SyntaxLibName, OpenSyntax}, // midnight
 }
 
 // OpenLibs loads the built-in libraries. It is equivalent to running OpenLoad,

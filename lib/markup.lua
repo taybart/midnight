@@ -811,12 +811,28 @@ local function cssRule(selector, rules, out)
   end
 end
 
+-- A top-level `@` key is an at-rule of its own, not a class: its keys are
+-- the rule's own selectors, as written (`from`, `50%`, ...), ex.
+-- `['@keyframes float'] = { from = { opacity = 0 }, to = { opacity = 1 } }`.
+-- Its name isn't hashed, so pick one that won't collide.
+local function isAtRule(name)
+  return name:sub(1, 1) == '@'
+end
+
 function M.css(rules)
   assert(type(rules) == 'table', 'markup: css requires a table of rules, by class name')
   local out = {}
   for _, name in ipairs(sortedKeys(rules)) do
     assert(type(rules[name]) == 'table', 'markup: css rules for ' .. name .. ' must be a table')
-    cssRule('.' .. name .. '-' .. HASH, rules[name], out)
+    if isAtRule(name) then
+      local inner = {}
+      for _, selector in ipairs(sortedKeys(rules[name])) do
+        cssRule(selector, rules[name][selector], inner)
+      end
+      out[#out + 1] = name .. ' { ' .. table.concat(inner, ' ') .. ' }'
+    else
+      cssRule('.' .. name .. '-' .. HASH, rules[name], out)
+    end
   end
   local text = table.concat(out, '\n')
   local h = hash(text)
@@ -828,7 +844,9 @@ function M.css(rules)
 
   local names = {}
   for _, name in ipairs(sortedKeys(rules)) do
-    names[name] = name .. '-' .. h
+    if not isAtRule(name) then
+      names[name] = name .. '-' .. h
+    end
   end
   return names
 end

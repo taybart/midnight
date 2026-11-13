@@ -58,6 +58,9 @@ type midnightLexer struct {
 	// > 0 while lexing a raw token (ex. inside a string's interpolation, which
 	// is part of the string's raw token).
 	rawDepth int
+
+	// Highlight spans (see midnight_highlight.go), or nil when not needed.
+	hl *[]HighlightSpan
 }
 
 // MidnightRawKind is the kind of an MidnightRawToken.
@@ -158,6 +161,9 @@ func midnightLex(lx *midnightLexer) (tokens []midnightToken, err error) {
 		if lx.raw != nil {
 			*lx.raw = append(*lx.raw, MidnightRawToken{Kind: RawComment, Text: text[:lx.pos], End: lx.pos, Line: 1, EndLine: 1})
 		}
+		if lx.hl != nil {
+			*lx.hl = append(*lx.hl, HighlightSpan{Kind: HlComment, Start: 0, End: lx.pos})
+		}
 	}
 
 	for !lx.eof() {
@@ -191,7 +197,18 @@ func (lx *midnightLexer) token() {
 		for !lx.eof() && isMidnightWordBody(lx.text[lx.pos]) {
 			lx.pos++
 		}
-		lx.emit(midnightWord, lx.text[start:lx.pos], lx.line)
+		word := lx.text[start:lx.pos]
+		lx.emit(midnightWord, word, lx.line)
+		if lx.hl != nil {
+			kind := HlWord
+			switch {
+			case midnightKeywords[word]:
+				kind = HlKeyword
+			case word == "true" || word == "false" || word == "nil":
+				kind = HlConstant
+			}
+			*lx.hl = append(*lx.hl, HighlightSpan{Kind: kind, Start: start, End: lx.pos})
+		}
 	case c == '\'':
 		lx.singleQuoteString()
 	case c == '"':
@@ -199,10 +216,13 @@ func (lx *midnightLexer) token() {
 	case c == '-' && lx.peek(1) == '-':
 		lx.comment()
 	case c == '0' && (lx.peek(1) == 'x' || lx.peek(1) == 'X'):
+		defer lx.end(lx.begin(HlNumber))
 		lx.hex()
 	case c == '0' && (lx.peek(1) == 'b' || lx.peek(1) == 'B'):
+		defer lx.end(lx.begin(HlNumber))
 		lx.binary()
 	case isMidnightDigit(c) || c == '.' && isMidnightDigit(lx.peek(1)):
+		defer lx.end(lx.begin(HlNumber))
 		lx.decimal()
 	case c == '[' && (lx.peek(1) == '[' || lx.peek(1) == '='):
 		lx.blockString()
@@ -212,11 +232,13 @@ func (lx *midnightLexer) token() {
 		for _, n := range []int{3, 2} {
 			if lx.pos+n <= len(lx.text) && midnightSymbols[lx.text[lx.pos:lx.pos+n]] {
 				lx.emit(midnightSymbol, lx.text[lx.pos:lx.pos+n], lx.line)
+				lx.mark(HlSymbol, n)
 				lx.pos += n
 				return
 			}
 		}
 		lx.emit(midnightSymbol, string(c), lx.line)
+		lx.mark(HlSymbol, 1)
 		lx.pos++
 	}
 }
@@ -350,6 +372,7 @@ func (lx *midnightLexer) binary() {
 }
 
 func (lx *midnightLexer) comment() {
+	defer lx.end(lx.begin(HlComment))
 	lx.pos += 2 // --
 
 	if lx.peek(0) == '[' {
@@ -467,6 +490,7 @@ func (lx *midnightLexer) escapeSequence(buf *bytes.Buffer) {
 }
 
 func (lx *midnightLexer) singleQuoteString() {
+	defer lx.end(lx.begin(HlString))
 	lx.emit(midnightSingleQuote, "'", lx.line)
 	lx.pos++
 
@@ -493,6 +517,7 @@ func (lx *midnightLexer) singleQuoteString() {
 }
 
 func (lx *midnightLexer) doubleQuoteString() {
+	defer lx.end(lx.begin(HlString))
 	lx.emit(midnightDoubleQuote, "\"", lx.line)
 	lx.pos++
 
@@ -535,6 +560,7 @@ func (lx *midnightLexer) doubleQuoteString() {
 }
 
 func (lx *midnightLexer) blockString() {
+	defer lx.end(lx.begin(HlString))
 	lx.pos++ // [
 
 	equals := 0
@@ -605,7 +631,9 @@ func (lx *midnightLexer) blockString() {
 
 func (lx *midnightLexer) interpolation() {
 	lx.emit(midnightInterpolation, "{", lx.line)
+	lx.mark(HlInterp, 1)
 	lx.pos++
+	inside := lx.begin(HlPlain) // (code, not string)
 
 	braceDepth := 0
 
@@ -616,10 +644,12 @@ func (lx *midnightLexer) interpolation() {
 		case lx.peek(0) == '{':
 			braceDepth++
 			lx.emit(midnightSymbol, "{", lx.line)
+			lx.mark(HlSymbol, 1)
 			lx.pos++
 		case lx.peek(0) == '}':
 			braceDepth--
 			lx.emit(midnightSymbol, "}", lx.line)
+			lx.mark(HlSymbol, 1)
 			lx.pos++
 		case braceDepth == 0 && lx.peek(0) == ':' && lx.peek(1) == '%':
 			lx.formatSpec()
@@ -628,7 +658,9 @@ func (lx *midnightLexer) interpolation() {
 		}
 	}
 
+	lx.end(inside)
 	lx.emit(midnightInterpolation, "}", lx.line)
+	lx.mark(HlInterp, 1)
 	lx.pos++
 }
 
@@ -640,6 +672,7 @@ var midnightFormatSpecPattern = regexp.MustCompile(`^%[-+ #0]*[0-9]*(\.[0-9]*)?[
 // `"{progress:%.2f}"`, which formats the value w/ string.format (a method
 // name can't start w/ `%`, so `{obj:method()}` is still a method call).
 func (lx *midnightLexer) formatSpec() {
+	defer lx.end(lx.begin(HlFormat))
 	lx.pos++ // :
 	start := lx.pos
 	for lx.peek(0) != '}' {

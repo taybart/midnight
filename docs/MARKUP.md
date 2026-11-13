@@ -184,6 +184,10 @@ local s = css({
 - `document` puts all the styles in a `<style>` in the `<head>` (adding one to
   an `<html>` w/o it, or at the start of a page w/o `<html>`). `styles()` returns them, to put them somewhere else (ex. in a shadow
   root, w/ `render`).
+- A top-level key starting w/ `@` is an at-rule of its own, ex. keyframes:
+  `['@keyframes drift'] = { from = { opacity = 0 }, ['50%'] = { opacity = 1 } }`.
+  Its name isn't hashed (so pick one that won't collide), and it isn't
+  returned as a class name.
 - Call `css` at the top of a module (it's cheap to call in a component too:
   the same rules are only added once). For per-instance values, use the
   `style` attribute.

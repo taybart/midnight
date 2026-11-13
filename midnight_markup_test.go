@@ -719,6 +719,30 @@ return s.card, s.title, again.card, other.title, markup.styles(), markup.render(
 	}
 }
 
+// A top-level `@` key (keyframes) is emitted as its own at-rule, unhashed,
+// and isn't a class name.
+func TestMidnightMarkupCSSKeyframes(t *testing.T) {
+	L := NewState()
+	defer L.Close()
+	source := `local markup = require('midnight.markup')
+local s = markup.css({
+  ['@keyframes drift'] = { from = { opacity = 0 }, ['50%'] = { opacity = 1, transform = 'translateY(-4px)' } },
+  zz = { animation = 'drift 2s infinite' },
+})
+return s.zz, s['@keyframes drift'] == nil, markup.styles()`
+	if err := L.DoMidnightString(source); err != nil {
+		t.Fatal(err)
+	}
+	zz, noName, styles := L.Get(-3).String(), L.Get(-2), L.Get(-1).String()
+	if noName != LTrue {
+		t.Errorf("an at-rule shouldn't be a class name")
+	}
+	want := "@keyframes drift { 50% { opacity: 1; transform: translateY(-4px); } from { opacity: 0; } }\n." + zz + " { animation: drift 2s infinite; }"
+	if !strings.Contains(styles, want) {
+		t.Errorf("styles\n%s\nwant\n%s", styles, want)
+	}
+}
+
 // New styles after the page was sent need the whole page.
 func TestMidnightMarkupCSSDispatch(t *testing.T) {
 	L := NewState()

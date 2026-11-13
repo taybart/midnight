@@ -89,7 +89,8 @@ func (lx *midnightLexer) markupSpace() {
 	}
 }
 
-func (lx *midnightLexer) markupName() {
+// markupName lexes a tag or attribute name (kind is HlTag or HlAttr).
+func (lx *midnightLexer) markupName(kind string) {
 	if !isMarkupNameHead(lx.peek(0)) {
 		lx.markupUnexpected("name")
 	}
@@ -99,6 +100,9 @@ func (lx *midnightLexer) markupName() {
 		lx.pos++
 	}
 	lx.emit(midnightMarkupName, lx.text[start:lx.pos], lx.line)
+	if lx.hl != nil {
+		*lx.hl = append(*lx.hl, HighlightSpan{Kind: kind, Start: start, End: lx.pos})
+	}
 }
 
 func (lx *midnightLexer) markupUnexpected(expected string) {
@@ -112,16 +116,18 @@ func (lx *midnightLexer) markupUnexpected(expected string) {
 // markupElement lexes an element, starting at its `<`.
 func (lx *midnightLexer) markupElement() {
 	lx.emit(midnightMarkup, "<", lx.line)
+	lx.mark(HlMarkup, 1)
 	lx.pos++
 
 	if lx.peek(0) == '>' { // fragment
 		lx.emit(midnightMarkup, ">", lx.line)
+		lx.mark(HlMarkup, 1)
 		lx.pos++
 		lx.markupChildren()
 		return
 	}
 
-	lx.markupName()
+	lx.markupName(HlTag)
 	tag := lx.tokens[len(lx.tokens)-1].Value
 	jsonScript := false // <script type="application/json">, see markupJSON
 
@@ -131,10 +137,12 @@ func (lx *midnightLexer) markupElement() {
 		switch c := lx.peek(0); {
 		case c == '/' && lx.peek(1) == '>':
 			lx.emit(midnightMarkup, "/>", lx.line)
+			lx.mark(HlMarkup, 2)
 			lx.pos += 2
 			return
 		case c == '>':
 			lx.emit(midnightMarkup, ">", lx.line)
+			lx.mark(HlMarkup, 1)
 			lx.pos++
 			if jsonScript {
 				lx.markupJSON()
@@ -146,13 +154,14 @@ func (lx *midnightLexer) markupElement() {
 		case c == '{': // spread
 			lx.markupExpression()
 		case isMarkupNameHead(c):
-			lx.markupName()
+			lx.markupName(HlAttr)
 			attr := lx.tokens[len(lx.tokens)-1].Value
 			lx.markupSpace()
 			if lx.peek(0) != '=' {
 				continue
 			}
 			lx.emit(midnightMarkup, "=", lx.line)
+			lx.mark(HlMarkup, 1)
 			lx.pos++
 			lx.markupSpace()
 			valueStart := lx.pos
@@ -191,6 +200,9 @@ func (lx *midnightLexer) markupRawText(tag string) {
 	lx.line += strings.Count(text, "\n")
 	if strings.TrimSpace(text) != "" {
 		lx.emit(midnightMarkupText, text, startLine)
+		if lx.hl != nil {
+			*lx.hl = append(*lx.hl, HighlightSpan{Kind: HlRaw, Start: start, End: start + end})
+		}
 	}
 }
 
@@ -231,6 +243,9 @@ func (lx *midnightLexer) markupChildren() {
 	flush := func() {
 		if text := markupText(lx.text[start:lx.pos]); text != "" {
 			lx.emit(midnightMarkupText, text, startLine)
+			if lx.hl != nil {
+				*lx.hl = append(*lx.hl, HighlightSpan{Kind: HlText, Start: start, End: lx.pos})
+			}
 		}
 	}
 
@@ -241,16 +256,18 @@ func (lx *midnightLexer) markupChildren() {
 		case c == '<' && lx.peek(1) == '/':
 			flush()
 			lx.emit(midnightMarkup, "</", lx.line)
+			lx.mark(HlMarkup, 2)
 			lx.pos += 2
 			lx.markupSpace()
 			if lx.peek(0) != '>' {
-				lx.markupName()
+				lx.markupName(HlTag)
 				lx.markupSpace()
 			}
 			if lx.peek(0) != '>' {
 				lx.markupUnexpected("'>'")
 			}
 			lx.emit(midnightMarkup, ">", lx.line)
+			lx.mark(HlMarkup, 1)
 			lx.pos++
 			return
 		case c == '<':
@@ -273,6 +290,7 @@ func (lx *midnightLexer) markupChildren() {
 // markupExpression lexes a `{...}` expression (or spread) inside of an element.
 func (lx *midnightLexer) markupExpression() {
 	lx.emit(midnightMarkup, "{", lx.line)
+	lx.mark(HlMarkup, 1)
 	lx.pos++
 
 	braceDepth := 0
@@ -283,10 +301,12 @@ func (lx *midnightLexer) markupExpression() {
 		case lx.peek(0) == '{':
 			braceDepth++
 			lx.emit(midnightSymbol, "{", lx.line)
+			lx.mark(HlSymbol, 1)
 			lx.pos++
 		case lx.peek(0) == '}':
 			braceDepth--
 			lx.emit(midnightSymbol, "}", lx.line)
+			lx.mark(HlSymbol, 1)
 			lx.pos++
 		default:
 			lx.token()
@@ -294,6 +314,7 @@ func (lx *midnightLexer) markupExpression() {
 	}
 
 	lx.emit(midnightMarkup, "}", lx.line)
+	lx.mark(HlMarkup, 1)
 	lx.pos++
 }
 
