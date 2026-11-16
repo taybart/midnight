@@ -17,16 +17,56 @@ paths. `compile` and `lint` also take `-markup-factory name` (see
 ## compile
 
 ```sh
-midnight compile [-o dir] [-f] [-p] [-markup-factory name] [paths]
+midnight compile [-o dir] [-w] [-project] [-f] [-p] [-markup-factory name] [paths]
 ```
 
-Compiles `foo.mn` to `foo.lua` (next to it, or under `-o dir`, keeping the
-relative path). Same as the reference compiler's `midnight compile`:
+Compiles `foo.mn` to `foo.lua`, next to it by default:
 
 - Compiled files end w/ a `-- __MIDNIGHT_COMPILED__` footer.
 - Existing `.lua` files without the footer are never overwritten, unless `-f`.
 - `-p` prints the compiled code instead of writing files.
 - Stops at the first file that fails to compile (exit 1).
+
+`-o dir` writes into `dir` instead. Files found under a directory you pass keep
+their path relative to that directory, and files you name directly go straight
+into `dir`:
+
+```sh
+midnight compile -o lua midnight            # midnight/foo/init.mn -> lua/foo/init.lua
+midnight compile -o out midnight/foo/a.mn   # -> out/a.lua
+```
+
+### midnight.json
+
+A `midnight.json` (JSON, comments and trailing commas allowed) at the root of
+a project sets where its sources and compiled Lua live, ex. a Neovim plugin
+written in Midnight:
+
+```json
+{
+  "compile": { "src": "midnight", "out": "lua" }
+}
+```
+
+`src` and `out` are relative to the file. Then:
+
+- `midnight compile` (no paths) compiles `src` into `out`.
+- Any file under `src` compiles to the same path under `out`
+  (`midnight/foo/init.mn` -> `lua/foo/init.lua`), from any working directory:
+  the nearest `midnight.json` to the file is used. `-o` overrides it.
+- `-project` only compiles files under `src` and skips the rest, for editors
+  that compile on save (midnight.nvim does this).
+
+### Watching
+
+`-w` compiles, then keeps watching the paths (or the project's `src`) and
+recompiles files as they change, until interrupted. A file that fails to compile
+is reported and watching goes on, and deleting a source removes the Lua compiled
+from it.
+
+```sh
+midnight compile -w
+```
 
 The output is Lua 5.1 + `goto` (`continue` compiles to `goto`), w/ bit
 operators compiled to `bit32` calls, so it runs on LuaJIT and Lua 5.2+ (or 5.1

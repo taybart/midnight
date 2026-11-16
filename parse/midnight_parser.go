@@ -91,6 +91,10 @@ type midnightParser struct {
 	// can be lowered to statements where they're used (see midnight_cond.go).
 	conds map[ast.Expr]*midnightCond
 
+	// Parent of the class being declared (`super`), or nil (see
+	// midnight_class.go).
+	classSuper func(line int) ast.Expr
+
 	isVarargs           bool
 	isModuleReturnBlock bool
 	moduleReturnLine    int
@@ -305,7 +309,11 @@ func (p *midnightParser) target(name, scope string, line int) ast.Expr {
 }
 
 func (p *midnightParser) resolve(name string, line int) ast.Expr {
-	return p.target(name, p.lookup(name), line)
+	scope := p.lookup(name)
+	if name == "super" && scope == "" && p.classSuper != nil {
+		return p.classSuper(line)
+	}
+	return p.target(name, scope, line)
 }
 
 /* }}} */
@@ -1500,6 +1508,8 @@ func (p *midnightParser) statement() []ast.Stmt {
 		stmts = []ast.Stmt{p.returnStmt()}
 	case p.is("function"):
 		stmts = []ast.Stmt{p.functionDeclaration("")}
+	case p.isClassDeclaration():
+		stmts = p.classDeclaration("")
 	case p.is("local"), p.is("global"), p.is("module"):
 		scope := p.consume()
 
@@ -1512,6 +1522,8 @@ func (p *midnightParser) statement() []ast.Stmt {
 
 		if p.is("function") {
 			stmts = []ast.Stmt{p.functionDeclaration(scope)}
+		} else if p.isClassDeclaration() {
+			stmts = p.classDeclaration(scope)
 		} else {
 			stmts = p.variableDeclaration(scope, line)
 		}

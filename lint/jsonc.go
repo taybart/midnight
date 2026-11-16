@@ -24,6 +24,10 @@ func parseJSONC(data []byte) (any, error) {
 	return v, nil
 }
 
+// ParseJSONC is parseJSONC, for other config files (ex. the CLI's
+// midnight.json).
+func ParseJSONC(data []byte) (any, error) { return parseJSONC(data) }
+
 type jsoncParser struct {
 	data []byte
 	pos  int
