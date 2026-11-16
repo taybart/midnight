@@ -88,11 +88,13 @@ func main() {
 		return dispatch(args[0].String(), args[1], callback(args, 2))
 	}))
 	js.Global().Set("midnightCompile", js.FuncOf(func(this js.Value, args []js.Value) any {
-		chunk, err := parse.ParseMidnight(strings.NewReader(args[0].String()), chunkName)
+		src := args[0].String()
+		chunk, err := parse.ParseMidnight(strings.NewReader(src), chunkName)
 		if err != nil {
 			return map[string]any{"error": err.Error()}
 		}
-		return map[string]any{"lua": luagen.Generate(chunk)}
+		comments, _ := parse.MidnightDocComments(src, chunkName)
+		return map[string]any{"lua": luagen.GenerateWithComments(chunk, comments)}
 	}))
 	js.Global().Set("midnightTokens", js.FuncOf(func(this js.Value, args []js.Value) any {
 		src := args[0].String()
@@ -261,7 +263,8 @@ func run(src string, onOutput js.Value) map[string]any {
 		res["error"] = err.Error()
 		return res
 	}
-	res["lua"] = luagen.Generate(chunk)
+	comments, _ := parse.MidnightDocComments(src, chunkName)
+	res["lua"] = luagen.GenerateWithComments(chunk, comments)
 
 	L, out := newState(onOutput)
 	keep := false

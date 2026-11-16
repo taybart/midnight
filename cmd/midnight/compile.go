@@ -311,7 +311,11 @@ func (c *compiler) compileFile(path, root string) bool {
 		return false
 	}
 
-	compiled := luagen.Generate(chunk)
+	comments, err := parse.MidnightDocComments(string(source), path)
+	if err != nil {
+		comments = nil // the source already parsed, so this can't fail
+	}
+	compiled := luagen.GenerateWithComments(chunk, comments)
 	if !strings.HasSuffix(compiled, "\n") {
 		compiled += "\n"
 	}

@@ -20,7 +20,20 @@ import (
 
 // Generate returns Lua source code for a chunk.
 func Generate(chunk []ast.Stmt) string {
-	g := &generator{line: 1, fresh: true, scopes: []map[string]bool{{}}}
+	return generate(chunk, nil)
+}
+
+// GenerateWithComments is like Generate, but emits doc comments (ex.
+// lua-language-server annotations such as `---@class` or `---@param`) on their
+// source lines, so they stay adjacent to the declaration they annotate.
+// comments maps a source line (1-based) to the comment text to emit there; see
+// parse.MidnightDocComments.
+func GenerateWithComments(chunk []ast.Stmt, comments map[int]string) string {
+	return generate(chunk, comments)
+}
+
+func generate(chunk []ast.Stmt, comments map[int]string) string {
+	g := &generator{line: 1, fresh: true, scopes: []map[string]bool{{}}, comments: comments}
 	g.stmts(chunk)
 	g.write("\n")
 	return string(g.buf)
@@ -40,6 +53,9 @@ type generator struct {
 	// identifiers (see `name`).
 	scopes []map[string]bool
 
+	// Doc comments to emit, keyed by source line (see GenerateWithComments).
+	comments map[int]string
+
 	tmpCounter int
 }
 
@@ -57,6 +73,12 @@ func (g *generator) sync(line int) {
 		return
 	}
 	for ; g.line < line; g.line++ {
+		// Emit a doc comment (ex. a lua-language-server annotation) on its
+		// source line, keeping it adjacent to the declaration it annotates.
+		if c, ok := g.comments[g.line]; ok {
+			g.buf = append(g.buf, strings.Repeat("  ", g.depth)...)
+			g.buf = append(g.buf, c...)
+		}
 		g.buf = append(g.buf, '\n')
 	}
 	g.buf = append(g.buf, strings.Repeat("  ", g.depth)...)

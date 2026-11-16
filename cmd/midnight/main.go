@@ -126,7 +126,11 @@ A script of '-' is read from stdin.`)
 				fmt.Println(err.Error())
 				return 1
 			}
-			fmt.Print(luagen.Generate(chunk))
+			var comments map[int]string
+			if isMidnight {
+				comments, _ = parse.MidnightDocComments(string(source), script)
+			}
+			fmt.Print(luagen.GenerateWithComments(chunk, comments))
 			return 0
 		}
 		if opt_dt || opt_dc {
