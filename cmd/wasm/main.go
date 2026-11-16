@@ -7,6 +7,7 @@
 //	midnightDispatch(id, data, onOutput)       -> { html, error }
 //	midnightCompile(src)                       -> { lua, error }
 //	midnightTokens(src)                        -> [[kind, text], ...]
+//	midnightHighlight(src, lang)               -> [[class, text], ...] (or null)
 //	midnightLint(src)                          -> [[line, message, rule], ...]
 //	midnightFormat(src)                        -> { code, error }
 //
@@ -99,6 +100,23 @@ func main() {
 		toks := make([]any, len(spans))
 		for i, s := range spans {
 			toks[i] = []any{s.Kind, src[s.Start:s.End]}
+		}
+		return toks
+	}))
+	// classed spans for coloring (see parse.HighlightCode), lang 'midnight' or
+	// 'lua', null for others
+	js.Global().Set("midnightHighlight", js.FuncOf(func(this js.Value, args []js.Value) any {
+		src, lang := args[0].String(), "midnight"
+		if len(args) > 1 && args[1].Type() == js.TypeString {
+			lang = args[1].String()
+		}
+		spans, ok := parse.HighlightCode(lang, src)
+		if !ok {
+			return nil
+		}
+		toks := make([]any, len(spans))
+		for i, s := range spans {
+			toks[i] = []any{s.Class, src[s.Start:s.End]}
 		}
 		return toks
 	}))

@@ -12,7 +12,7 @@ const SyntaxLibName = "midnight.syntax"
 // OpenSyntax registers the syntax library in package.preload.
 func OpenSyntax(L *LState) int {
 	L.PreloadModule(SyntaxLibName, func(L *LState) int {
-		L.Push(L.SetFuncs(L.NewTable(), map[string]LGFunction{"tokens": syntaxTokens}))
+		L.Push(L.SetFuncs(L.NewTable(), map[string]LGFunction{"tokens": syntaxTokens, "highlight": syntaxHighlight}))
 		return 1
 	})
 	return 0
@@ -23,6 +23,29 @@ func OpenSyntax(L *LState) int {
 // keyword, constant, word, number, string, interp, format, comment, symbol,
 // markup, tag, attr, text, raw). On a lex error it returns the tokens up to
 // it (the rest is one plain token) and the error message.
+// syntaxHighlight(src, lang) returns src split into a list of `{ class, text }`
+// that covers all of it, in order, for coloring code: class is one of the
+// parse.Class* constants (keyword, const, number, string, interp, comment,
+// punct, operator, builtin, function, tag, attr), or "" for plain text. lang
+// is 'midnight' (or 'mn') or 'lua'. For other languages it returns nil.
+func syntaxHighlight(L *LState) int {
+	src := L.CheckString(1)
+	spans, ok := parse.HighlightCode(L.OptString(2, "midnight"), src)
+	if !ok {
+		L.Push(LNil)
+		return 1
+	}
+	list := L.CreateTable(len(spans), 0)
+	for _, s := range spans {
+		tok := L.CreateTable(0, 2)
+		tok.RawSetString("class", LString(s.Class))
+		tok.RawSetString("text", LString(src[s.Start:s.End]))
+		list.Append(tok)
+	}
+	L.Push(list)
+	return 1
+}
+
 func syntaxTokens(L *LState) int {
 	src := L.CheckString(1)
 	spans, err := parse.MidnightHighlight(src)
