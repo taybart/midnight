@@ -599,7 +599,9 @@ func (p *midnightParser) tableConstructor() ast.Expr {
 		}
 	})
 
-	return midnightLine(&ast.TableExpr{Fields: fields}, line)
+	table := midnightLine(&ast.TableExpr{Fields: fields}, line)
+	table.SetLastLine(p.prevLine()) // the closing brace
+	return table
 }
 
 /* }}} */

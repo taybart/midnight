@@ -43,3 +43,24 @@ func TestGenerateWithComments(t *testing.T) {
 		t.Errorf("Generate should not emit comments:\n%s", plain)
 	}
 }
+
+func TestTableFormatting(t *testing.T) {
+	src := "local t = {\n  a = 1,\n  b = 2,\n}\n"
+	chunk, err := parse.ParseMidnight(strings.NewReader(src), "<test>")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := Generate(chunk)
+
+	// `key = value` fields stay together (no `key = \n value` split).
+	if strings.Contains(got, "a = \n") || strings.Contains(got, "b = \n") {
+		t.Errorf("table fields split across `=`:\n%s", got)
+	}
+	if !strings.Contains(got, "a = 1") || !strings.Contains(got, "b = 2") {
+		t.Errorf("table fields not intact:\n%s", got)
+	}
+	// The closing brace is on its own line.
+	if !strings.Contains(got, "\n}") {
+		t.Errorf("closing brace not on its own line:\n%s", got)
+	}
+}

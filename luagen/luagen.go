@@ -636,6 +636,9 @@ func (g *generator) table(ex *ast.TableExpr) {
 
 		if field.Key != nil {
 			if str, ok := field.Key.(*ast.StringExpr); ok && isName(str.Value) {
+				// Sync the key like its value, so `key = value` stays on one
+				// line (see sync) instead of splitting across the `=`.
+				g.sync(str.Line())
 				g.write(str.Value)
 			} else {
 				g.write("[")
@@ -647,6 +650,8 @@ func (g *generator) table(ex *ast.TableExpr) {
 
 		g.expr(field.Value, 0)
 	}
+	// Midnight sets LastLine to the closing brace's line, so it lines up too.
+	g.sync(ex.LastLine())
 	g.write("}")
 }
 
