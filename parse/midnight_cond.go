@@ -79,7 +79,7 @@ func (p *midnightParser) ifExpression() ast.Expr {
 
 	for {
 		armLine := p.cur.Line
-		condition := p.expression(1)
+		condition := p.headerExpression()
 		cond.arms = append(cond.arms, midnightCondArm{line: armLine, condition: condition, value: p.condValue()})
 		if !p.branch("elseif") {
 			break
@@ -177,7 +177,7 @@ func (p *midnightParser) matchExpression() ast.Expr {
 	p.consume() // match
 
 	cond.subjectName = p.newTmpName()
-	cond.subject = p.expression(1)
+	cond.subject = p.headerExpression()
 	subject := midnightIdent(cond.subjectName, cond.line)
 
 	p.expect("{")
@@ -209,13 +209,32 @@ func (p *midnightParser) matchExpression() ast.Expr {
 }
 
 // condExpr is the expression for a cond where it can't be lowered to
-// statements: its if chain, in a function that's called right away. The cond
-// is kept (see p.conds) so declarations, assignments, and returns can lower it
-// to statements instead (see hoistCond).
+// statements (see lowerableExpr).
 func (p *midnightParser) condExpr(cond *midnightCond) ast.Expr {
-	line := cond.line
+	return p.lowerableExpr(cond, cond.line)
+}
+
+// midnightTarget makes the statement that hands a lowered expression's value
+// to where it's used (ex. assigns it to a local, or returns it).
+type midnightTarget func(value ast.Expr, line int) ast.Stmt
+
+// midnightLowerable is an expression that's lowered to statements: an if /
+// match expression, or a catch (see midnight_catch.go).
+type midnightLowerable interface {
+	lower(p *midnightParser, target midnightTarget) []ast.Stmt
+}
+
+func (cond *midnightCond) lower(p *midnightParser, target midnightTarget) []ast.Stmt {
+	return p.lowerCond(cond, target)
+}
+
+// lowerableExpr is the expression for l where it can't be lowered to
+// statements: its statements, in a function that's called right away. l is
+// kept (see p.lowered) so declarations, assignments, and returns can lower it
+// to statements instead (see hoistCond).
+func (p *midnightParser) lowerableExpr(l midnightLowerable, line int) ast.Expr {
 	parList := &ast.ParList{Names: []string{}, HasVargs: p.isVarargs}
-	fn := midnightLine(&ast.FunctionExpr{ParList: parList, Stmts: p.lowerCond(cond, midnightCondReturn)}, line)
+	fn := midnightLine(&ast.FunctionExpr{ParList: parList, Stmts: l.lower(p, midnightCondReturn)}, line)
 	fn.SetLastLine(p.prevLine())
 	args := []ast.Expr{}
 	if p.isVarargs { // so `...` in a branch is the enclosing function's
@@ -223,11 +242,20 @@ func (p *midnightParser) condExpr(cond *midnightCond) ast.Expr {
 	}
 	call := midnightCall(fn, args, line)
 	call.AdjustRet = true
-	if p.conds == nil {
-		p.conds = map[ast.Expr]*midnightCond{}
+	if p.lowered == nil {
+		p.lowered = map[ast.Expr]midnightLowerable{}
 	}
-	p.conds[call] = cond
+	p.lowered[call] = l
 	return call
+}
+
+// lowerValue hands value to target. An if / match / catch expression is
+// lowered into the target (so nesting doesn't add functions).
+func (p *midnightParser) lowerValue(value ast.Expr, line int, target midnightTarget) []ast.Stmt {
+	if l, ok := p.lowered[value]; ok {
+		return l.lower(p, target)
+	}
+	return []ast.Stmt{target(value, line)}
 }
 
 // midnightCondReturn is the target that returns the value.
@@ -236,14 +264,10 @@ func midnightCondReturn(value ast.Expr, line int) ast.Stmt {
 }
 
 // lowerCond lowers a cond to an if chain whose branches hand their value to
-// target. A branch whose value is itself an if / match expression is lowered
-// into the same target (so nesting doesn't add functions).
-func (p *midnightParser) lowerCond(cond *midnightCond, target func(value ast.Expr, line int) ast.Stmt) []ast.Stmt {
+// target (see lowerValue).
+func (p *midnightParser) lowerCond(cond *midnightCond, target midnightTarget) []ast.Stmt {
 	branch := func(value ast.Expr, line int) []ast.Stmt {
-		if inner, ok := p.conds[value]; ok {
-			return p.lowerCond(inner, target)
-		}
-		return []ast.Stmt{target(value, line)}
+		return p.lowerValue(value, line, target)
 	}
 
 	var stmts []ast.Stmt
@@ -274,38 +298,48 @@ func (p *midnightParser) lowerCond(cond *midnightCond, target func(value ast.Exp
 	return stmts
 }
 
-// hoistCond lowers exprs[0] to statements when it's an if / match expression:
-// it returns the statements that compute it into a local, and replaces it w/
-// that local. (Only the first expression: hoisting a later one would change
-// the order the expressions are evaluated in.)
+// hoistCond lowers exprs[0] to statements when it's an if / match / catch
+// expression: it returns the statements that compute it into a local, and
+// replaces it w/ that local. (Only the first expression: hoisting a later one
+// would change the order the expressions are evaluated in.)
 func (p *midnightParser) hoistCond(exprs []ast.Expr, line int) []ast.Stmt {
 	if len(exprs) == 0 {
 		return nil
 	}
-	cond, ok := p.conds[exprs[0]]
+	l, ok := p.lowered[exprs[0]]
 	if !ok {
 		return nil
 	}
 	tmp := p.newTmpName()
 	stmts := []ast.Stmt{midnightLocal([]string{tmp}, nil, line)}
-	stmts = append(stmts, p.lowerCond(cond, func(value ast.Expr, line int) ast.Stmt {
+	stmts = append(stmts, p.hoist(l, func(value ast.Expr, line int) ast.Stmt {
 		return midnightAssign(midnightIdent(tmp, line), value, line)
 	})...)
 	exprs[0] = midnightIdent(tmp, line)
 	return stmts
 }
 
-// returnCond lowers `return <if / match expression>` to an if chain w/ a
-// return in each branch, or returns nil.
+// hoist lowers l into a target in the enclosing function (not in a function
+// of its own), where a catch's `return` / `break` / `continue` mean what they
+// say (see midnightCatch.hoisted).
+func (p *midnightParser) hoist(l midnightLowerable, target midnightTarget) []ast.Stmt {
+	old := p.hoisting
+	p.hoisting = true
+	defer func() { p.hoisting = old }()
+	return l.lower(p, target)
+}
+
+// returnCond lowers `return <if / match / catch expression>` to statements
+// that return its value, or returns nil.
 func (p *midnightParser) returnCond(exprs []ast.Expr, line int) ast.Stmt {
 	if len(exprs) != 1 {
 		return nil
 	}
-	cond, ok := p.conds[exprs[0]]
+	l, ok := p.lowered[exprs[0]]
 	if !ok {
 		return nil
 	}
-	stmts := p.lowerCond(cond, midnightCondReturn)
+	stmts := p.hoist(l, midnightCondReturn)
 	if len(stmts) == 1 {
 		return stmts[0]
 	}

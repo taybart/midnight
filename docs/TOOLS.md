@@ -85,7 +85,7 @@ midnight or the reference compiler). Other Lua files are never removed.
 ## lint
 
 ```sh
-midnight lint [-g list] [-markup-factory name] [paths | -]
+midnight lint [-g list] [-snake-case=false] [-markup-factory name] [paths | -]
 ```
 
 Checks for likely mistakes. Explicitly named `.lua` files are checked as Lua,
@@ -101,6 +101,7 @@ and `-` reads stdin.
 | `unreachable` | code after `break`, `continue`, or `goto` (code after `return` is already a syntax error) |
 | `fat-arrow-component` | a `=>` function that builds markup elements but doesn't use `self`: probably a component, whose props would end up in `self` (use `->`) |
 | `and-or` | `a && b \|\| c` where `b` can be `nil` or `false`: it's then `c` even when `a` is true (use an [if expression](../README.md#if--match-expressions): `if a { b } else { c }`). Not reported when `b` can't be falsy (a literal, table, function, element, `..`, arithmetic, `math.*`, `tostring`, ...), when `c` is `nil` / `false`, or for safe navigation (`x && x.y \|\| d`, `x && x:m() \|\| d`, `x && f(x) \|\| d`) |
+| `snake-case` | a camelCase local, parameter, loop variable, or `module` / `global` name (ex. `pageFor`, use `page_for`). PascalCase (components, classes) and SCREAMING_CASE constants are fine, and table fields and methods aren't checked, since they often have to match something else (JSON, a host's API). `-snake-case=false` turns it off |
 | `syntax` | the file doesn't parse |
 
 Not reported:

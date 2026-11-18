@@ -44,7 +44,7 @@ local function escape(s)
   return (gsub(s, '[&<>"\']', ESCAPES))
 end
 
-local function isCallable(v)
+local function is_callable(v)
   if type(v) == 'function' then return true end
   local mt = getmetatable(v)
   return type(mt) == 'table' and mt.__call ~= nil
@@ -54,7 +54,7 @@ end
 --   tag: string (element), function (component), or nil (fragment)
 --
 -- Components aren't called here, but when they're rendered (top down, see
--- renderComponent), w/ their props (`props.children` holds the children).
+-- render_component), w/ their props (`props.children` holds the children).
 -- `nil`, `false`, and `true` children render nothing, so `{cond && <b/>}`
 -- works as expected. They're kept (nil as false) as placeholders, so a
 -- condition doesn't change the position (and so the state) of the children
@@ -75,7 +75,7 @@ function M.h(tag, props, ...)
     return children
   elseif type(tag) == 'string' then
     return setmetatable({ tag, props or {}, children }, Node)
-  elseif isCallable(tag) then
+  elseif is_callable(tag) then
     props = props or {}
     props.children = children
     return setmetatable({ tag, props }, Node)
@@ -89,9 +89,9 @@ function M.raw(html)
   return setmetatable({ tostring(html) }, Raw)
 end
 
--- isElement(v) returns whether `v` was built by `h` (an element or a
+-- is_element(v) returns whether `v` was built by `h` (an element or a
 -- component).
-function M.isElement(v)
+function M.is_element(v)
   return getmetatable(v) == Node
 end
 
@@ -108,7 +108,7 @@ end
 local NO_KEYS = {}
 
 -- (callers only read the keys, so tables w/o any share NO_KEYS)
-local function sortedKeys(t)
+local function sorted_keys(t)
   if next(t) == nil then return NO_KEYS end
   local keys, n = {}, 0
   for key in pairs(t) do
@@ -128,7 +128,7 @@ end
 --   JSON.parse(document.getElementById('repos').textContent)
 --
 -- The JSON never has a `<`, `>`, or `&` (they're \u escaped), so nothing in
--- the data can close the <script>. json(v) / jsonText(s) values are already
+-- the data can close the <script>. json(v) / json_text(s) values are already
 -- encoded, and pass through as is.
 
 local Json = {} -- metatable of encoded JSON (safe in a <script>)
@@ -144,22 +144,22 @@ local JSON_ESCAPES = {
   ['\n'] = '\\n', ['\r'] = '\\r', ['\t'] = '\\t',
   ['<'] = '\\u003c', ['>'] = '\\u003e', ['&'] = '\\u0026',
 }
-local function jsonEscape(c)
+local function json_escape(c)
   return JSON_ESCAPES[c] or string.format('\\u%04x', c:byte())
 end
 
-local function jsonString(s)
+local function json_string(s)
   if find(s, '[%c"\\<>&\226]') then
-    s = gsub(s, '[%c"\\<>&]', jsonEscape)
+    s = gsub(s, '[%c"\\<>&]', json_escape)
     -- valid JSON, but line terminators in js before ES2019
     s = gsub(gsub(s, '\226\128\168', '\\u2028'), '\226\128\169', '\\u2029')
   end
   return '"' .. s .. '"'
 end
 
-local encodeJson
+local encode_json
 
-local function jsonTable(t, out, path, seen)
+local function json_table(t, out, path, seen)
   local mt = getmetatable(t)
   if mt == Json then
     out[#out + 1] = t[1]
@@ -197,7 +197,7 @@ local function jsonTable(t, out, path, seen)
     out[#out + 1] = '['
     for i = 1, n do
       if i > 1 then out[#out + 1] = ',' end
-      encodeJson(t[i], out, path .. '[' .. i .. ']', seen)
+      encode_json(t[i], out, path .. '[' .. i .. ']', seen)
     end
     out[#out + 1] = ']'
   else
@@ -210,16 +210,16 @@ local function jsonTable(t, out, path, seen)
     out[#out + 1] = '{'
     for i, k in ipairs(keys) do
       if i > 1 then out[#out + 1] = ',' end
-      out[#out + 1] = jsonString(k)
+      out[#out + 1] = json_string(k)
       out[#out + 1] = ':'
-      encodeJson(t[k], out, path .. '.' .. k, seen)
+      encode_json(t[k], out, path .. '.' .. k, seen)
     end
     out[#out + 1] = '}'
   end
   seen[t] = nil
 end
 
-function encodeJson(v, out, path, seen)
+function encode_json(v, out, path, seen)
   local t = type(v)
   if v == nil then
     out[#out + 1] = 'null'
@@ -236,9 +236,9 @@ function encodeJson(v, out, path, seen)
       out[#out + 1] = tonumber(short) == v and short or string.format('%.17g', v)
     end
   elseif t == 'string' then
-    out[#out + 1] = jsonString(v)
+    out[#out + 1] = json_string(v)
   elseif t == 'table' then
-    jsonTable(v, out, path, seen)
+    json_table(v, out, path, seen)
   else
     error('markup: json: can\'t encode a ' .. t .. path, 0)
   end
@@ -248,13 +248,13 @@ end
 function M.json(v)
   if getmetatable(v) == Json then return v end
   local out = {}
-  encodeJson(v, out, '', {})
+  encode_json(v, out, '', {})
   return setmetatable({ table.concat(out) }, Json)
 end
 
--- jsonText(s) is JSON encoded by the host (ex. Go's encoding/json), trusted to
+-- json_text(s) is JSON encoded by the host (ex. Go's encoding/json), trusted to
 -- be valid and to have no `<` (like raw, it's rendered as is).
-function M.jsonText(s)
+function M.json_text(s)
   return setmetatable({ tostring(s) }, Json)
 end
 
@@ -283,7 +283,7 @@ for word in ([[break case catch class const continue debugger default delete do
   JS_RESERVED[word] = true
 end
 
-local function defineVars(data)
+local function define_vars(data)
   if type(data) ~= 'table' or getmetatable(data) ~= nil then
     error('markup: <script define:vars={...}> takes a table of names to values', 0)
   end
@@ -309,14 +309,16 @@ local function defineVars(data)
   return table.concat(out)
 end
 
-local function isJsonScript(tag, props)
-  return tag == 'script' and props.type == 'application/json'
+-- (an import map's JSON too: `{{ imports = { ... } }}` is encoded, and one
+-- written as JSON text passes through as is)
+local function is_json_script(tag, props)
+  return tag == 'script' and (props.type == 'application/json' or props.type == 'importmap')
 end
 
 -- `style={{ color = 'red', ['font-size'] = '2em' }}`
-local function styleValue(style)
+local function style_value(style)
   local parts = {}
-  for _, key in ipairs(sortedKeys(style)) do
+  for _, key in ipairs(sorted_keys(style)) do
     parts[#parts + 1] = key .. ': ' .. tostring(style[key])
   end
   return table.concat(parts, '; ')
@@ -328,7 +330,7 @@ end
 --
 --   class={cx('btn', active && 'on', { 'a', 'b' })}
 --   class={{ 'btn', 'btn-lg', active = isActive }}   -- the class attribute's own table form
-local function appendClass(parts, v)
+local function append_class(parts, v)
   if v == nil or v == false then
     return
   end
@@ -337,9 +339,9 @@ local function appendClass(parts, v)
     parts[#parts + 1] = tostring(v)
   elseif t == 'table' and getmetatable(v) == nil then
     for _, name in ipairs(v) do
-      appendClass(parts, name)
+      append_class(parts, name)
     end
-    for _, key in ipairs(sortedKeys(v)) do
+    for _, key in ipairs(sorted_keys(v)) do
       if v[key] then parts[#parts + 1] = key end
     end
   end
@@ -348,20 +350,20 @@ end
 function M.cx(...)
   local parts = {}
   for i = 1, select('#', ...) do
-    appendClass(parts, (select(i, ...)))
+    append_class(parts, (select(i, ...)))
   end
   return table.concat(parts, ' ')
 end
 
 -- `class={{ 'btn', 'btn-lg', active = isActive }}`
-local function classValue(class)
+local function class_value(class)
   return M.cx(class)
 end
 
 -- What's kept for a page between renders. `mount` / `dispatch` use the
 -- default one; each `session()` has its own, so one lua state can serve many
 -- pages (ex. a bot's panel for each of its viewers).
-local function newPage()
+local function new_page()
   return {
     -- functions in `on*` attributes, by id (see below)
     actions = {},
@@ -371,26 +373,26 @@ local function newPage()
     -- component instances, by id (see below): id -> { hooks = {} }
     instances = {},
     -- `rendered` of the last (outermost) render, and the root's shell
-    lastRender = nil,
+    last_render = nil,
     -- sheets in the last document of the mounted page
-    sentSheets = 0,
+    sent_sheets = 0,
   }
 end
 -- The page being rendered.
-local P = newPage()
+local P = new_page()
 
 -- Actions (see `mount`): functions in `on*` attributes, by id. Ids are the
 -- id of the component they're in and their position in it (ex. `r:1.2:3#1`),
 -- so they don't change when other components do.
 
 -- `onclick`, `onClick`, and `on:click` are all `click`.
-local function eventName(key)
+local function event_name(key)
   local event = key:match('^on:(.+)$') or key:match('^on(%a.*)$')
   return event and event:lower()
 end
 
 -- js string literal (single quoted), safe in html attributes and <script>
-local function jsString(s)
+local function js_string(s)
   return "'" .. tostring(s):gsub('[%c\'"\\<>&]', function(c)
     return string.format('\\u%04x', c:byte())
   end) .. "'"
@@ -402,7 +404,7 @@ end
 -- `state`). Instances that aren't rendered again are dropped after each
 -- render.
 local seen = {} -- ids rendered in the current render
-local libs, libSeen = {}, {} -- element libraries used in the current render (see `elements`)
+local libs, lib_seen = {}, {} -- element libraries used in the current render (see `elements`)
 local current -- { instance, hook } of the component being rendered
 
 -- What each component rendered in the current render (for `dispatch` to send
@@ -420,18 +422,18 @@ local rendered = {}
 local marked = {}
 -- `rendered` of the last (outermost) render, and the root's shell
 
--- The component being rendered (or the root): { id, children, nextAction },
+-- The component being rendered (or the root): { id, children, next_action },
 -- where children are the indices of child components' html in its buffer.
 local frame
 
-local componentIds = setmetatable({}, { __mode = 'k' })
-local nextComponentId = 0
-local function componentId(fn)
-  local id = componentIds[fn]
+local component_ids = setmetatable({}, { __mode = 'k' })
+local next_component_id = 0
+local function component_id(fn)
+  local id = component_ids[fn]
   if not id then
-    nextComponentId = nextComponentId + 1
-    id = nextComponentId
-    componentIds[fn] = id
+    next_component_id = next_component_id + 1
+    id = next_component_id
+    component_ids[fn] = id
   end
   return id
 end
@@ -445,17 +447,17 @@ local function slot(path, i, child)
   return path .. '.' .. i
 end
 
-local renderTo
+local render_to
 
 -- `owners` are the ids of the components whose root is this element (in
 -- `data-midnight` on mounted pages).
-local function renderElement(buf, node, path, owners)
+local function render_element(buf, node, path, owners)
   local tag, props = node[1], node[2]
   local vars = props['define:vars']
   if vars ~= nil and tag ~= 'script' then
     error('markup: define:vars only works on a <script> (it\'s on a <' .. tag .. '>)', 0)
   end
-  local prelude = vars ~= nil and vars ~= false and defineVars(vars)
+  local prelude = vars ~= nil and vars ~= false and define_vars(vars)
   buf[#buf + 1] = '<' .. tag
   if owners and P.mounted then
     buf[#buf + 1] = ' data-midnight="' .. escape(table.concat(owners, ' ')) .. '"'
@@ -470,21 +472,21 @@ local function renderElement(buf, node, path, owners)
   end
 
   -- Sorted, so output is deterministic.
-  local keys = sortedKeys(props)
+  local keys = sorted_keys(props)
   for k = 1, #keys do
     local key = keys[k]
     local value = props[key]
-    local event = type(value) == 'function' and P.mounted and eventName(key)
+    local event = type(value) == 'function' and P.mounted and event_name(key)
     if event then
-      frame.nextAction = frame.nextAction + 1
-      local id = frame.id .. '#' .. frame.nextAction
+      frame.next_action = frame.next_action + 1
+      local id = frame.id .. '#' .. frame.next_action
       P.actions[id] = value
       if P.mounted.attrs == 'data' then
         -- for hosts w/ their own client (ex. one that sanitizes the html,
         -- which drops `on*` attributes): the event's action id, nothing to run
         buf[#buf + 1] = ' data-mn-' .. event:gsub('[^%w-]', '') .. '="' .. escape(id) .. '"'
       else
-        buf[#buf + 1] = ' on' .. event .. '="midnight.rpc(' .. jsString(id) .. ', event)"'
+        buf[#buf + 1] = ' on' .. event .. '="midnight.rpc(' .. js_string(id) .. ', event)"'
       end
     elseif key == 'children' or key == 'key' or (prelude and key == 'define:vars') or value == nil or value == false or type(value) == 'function' then
       -- skipped (functions are event handlers, which only mean something in
@@ -493,7 +495,7 @@ local function renderElement(buf, node, path, owners)
       buf[#buf + 1] = ' ' .. key
     else
       if type(value) == 'table' and getmetatable(value) == nil then
-        value = key == 'style' and styleValue(value) or classValue(value)
+        value = key == 'style' and style_value(value) or class_value(value)
       end
       buf[#buf + 1] = ' ' .. key .. '="' .. escape(value) .. '"'
     end
@@ -511,15 +513,18 @@ local function renderElement(buf, node, path, owners)
   end
 
   -- text is rendered here: it doesn't need a path (only components do)
-  local children, rawText = node[3], RAW_TEXT[tag]
+  local children, raw_text = node[3], RAW_TEXT[tag]
   if prelude then
     buf[#buf + 1] = prelude
   end
-  if isJsonScript(tag, props) then
+  if is_json_script(tag, props) then
     local empty = true
     for i = 1, #children do
       local child = children[i]
-      if child ~= false and child ~= true then
+      if type(child) == 'string' and props.type == 'importmap' then
+        buf[#buf + 1] = child -- (JSON text, written in the page)
+        empty = false
+      elseif child ~= false and child ~= true then
         buf[#buf + 1] = M.json(child)[1]
         empty = false
       end
@@ -535,9 +540,9 @@ local function renderElement(buf, node, path, owners)
   for i = 1, #children do
     local child = children[i]
     if type(child) == 'string' then
-      buf[#buf + 1] = rawText and child or escape(child)
+      buf[#buf + 1] = raw_text and child or escape(child)
     elseif child ~= false and child ~= true then
-      renderTo(buf, child, rawText, slot(path, i, child))
+      render_to(buf, child, raw_text, slot(path, i, child))
     end
   end
   buf[#buf + 1] = '</' .. tag .. '>'
@@ -585,13 +590,13 @@ local join = native.join or function(buf, skip)
   return table.concat(flatten(buf, {}, skip))
 end
 
--- htmlOf returns a component's html (w/ `data-midnight`, for `dispatch`).
-local function htmlOf(entry)
+-- html_of returns a component's html (w/ `data-midnight`, for `dispatch`).
+local function html_of(entry)
   return join(entry.own)
 end
 
-local function renderComponent(buf, node, rawText, path, owners)
-  local id = path .. ':' .. componentId(node[1])
+local function render_component(buf, node, raw_text, path, owners)
+  local id = path .. ':' .. component_id(node[1])
   seen[id] = true
   local instance = P.instances[id]
   if not instance then
@@ -601,9 +606,9 @@ local function renderComponent(buf, node, rawText, path, owners)
   local entry = { parent = frame.id }
   rendered[id] = entry
 
-  local parent, parentFrame = current, frame
+  local parent, parent_frame = current, frame
   current = { instance = instance, hook = 0 }
-  frame = { id = id, children = {}, nextAction = 0 }
+  frame = { id = id, children = {}, next_action = 0 }
   local ok, result = pcall(node[1], node[2])
   current = parent
   if not ok then
@@ -615,76 +620,76 @@ local function renderComponent(buf, node, rawText, path, owners)
     ids[i + 1] = owner
   end
   local own = {}
-  renderTo(own, result, rawText, id, ids)
+  render_to(own, result, raw_text, id, ids)
 
   entry.own = own
   entry.shell = shell(own, frame.children)
-  frame = parentFrame
+  frame = parent_frame
 
   buf[#buf + 1] = own
   frame.children[#buf] = id
 end
 
-function renderTo(buf, node, rawText, path, owners)
+function render_to(buf, node, raw_text, path, owners)
   local t = type(node)
 
   if node == nil or node == false or node == true then
     return
   elseif t == 'string' then
-    buf[#buf + 1] = rawText and node or escape(node)
+    buf[#buf + 1] = raw_text and node or escape(node)
   elseif t == 'number' then
     buf[#buf + 1] = tostring(node)
   elseif t == 'table' then
     local mt = getmetatable(node)
     if mt == Node and type(node[1]) ~= 'string' then
-      renderComponent(buf, node, rawText, path, owners)
+      render_component(buf, node, raw_text, path, owners)
     elseif mt == Node then
-      renderElement(buf, node, path, owners)
+      render_element(buf, node, path, owners)
     elseif mt == Raw or mt == Json then
       buf[#buf + 1] = node[1]
     elseif mt ~= nil and mt.__tostring then
-      renderTo(buf, tostring(node), rawText, path)
+      render_to(buf, tostring(node), raw_text, path)
     else -- list of children (ex. a fragment, or the result of `map`)
       for i = 1, #node do
         local child = node[i]
         if type(child) == 'string' then
-          buf[#buf + 1] = rawText and child or escape(child)
+          buf[#buf + 1] = raw_text and child or escape(child)
         elseif child ~= false and child ~= true then
-          renderTo(buf, child, rawText, slot(path, i, child))
+          render_to(buf, child, raw_text, slot(path, i, child))
         end
       end
     end
   elseif t == 'function' then -- lazy child
-    renderTo(buf, node(), rawText, path, owners)
+    render_to(buf, node(), raw_text, path, owners)
   else
     error('markup: can\'t render a ' .. t, 0)
   end
 end
 
-local renderDepth, nestedRenders = 0, 0
+local render_depth, nested_renders = 0, 0
 
 -- render(node) renders a node (or string, list, etc.) to an HTML string.
 function M.render(node)
   -- renders can nest (ex. `tostring(<b/>)` in a component), only the
   -- outermost one starts / finishes a render
-  local outermost = renderDepth == 0
+  local outermost = render_depth == 0
   local root = 'r'
-  local parent, parentFrame = current, frame
+  local parent, parent_frame = current, frame
   if outermost then
-    P.actions, seen, rendered, marked, nestedRenders = {}, {}, {}, {}, 0
-    libs, libSeen = {}, {}
+    P.actions, seen, rendered, marked, nested_renders = {}, {}, {}, {}, 0
+    libs, lib_seen = {}, {}
   else
-    nestedRenders = nestedRenders + 1
-    root = 'n' .. nestedRenders
+    nested_renders = nested_renders + 1
+    root = 'n' .. nested_renders
   end
-  frame = { id = root, children = {}, nextAction = 0 }
+  frame = { id = root, children = {}, next_action = 0 }
 
-  renderDepth = renderDepth + 1
+  render_depth = render_depth + 1
   local buf = {}
-  local ok, err = pcall(renderTo, buf, node, false, root)
-  renderDepth = renderDepth - 1
-  local rootFrame = frame
-  current, frame = parent, parentFrame
+  local ok, err = pcall(render_to, buf, node, false, root)
+  render_depth = render_depth - 1
+  local root_frame = frame
+  current, frame = parent, parent_frame
   if not ok then
     error(err, 0)
   end
@@ -698,7 +703,7 @@ function M.render(node)
         P.instances[id] = nil
       end
     end
-    P.lastRender = { instances = rendered, shell = shell(buf, rootFrame.children) }
+    P.last_render = { instances = rendered, shell = shell(buf, root_frame.children) }
   end
   return html
 end
@@ -755,7 +760,7 @@ end
 -- shadow root).
 
 local sheets = {} -- css text of each `css` call (in order, no duplicates)
-local sheetHashes = {}
+local sheet_hashes = {}
 
 local BASE36 = '0123456789abcdefghijklmnopqrstuvwxyz'
 local function hash(s)
@@ -783,9 +788,9 @@ end
 -- known. (Not \0, lua 5.1 patterns can't have it.)
 local HASH = '\1'
 
-local function cssRule(selector, rules, out)
+local function css_rule(selector, rules, out)
   local declarations, nested = {}, {}
-  for _, key in ipairs(sortedKeys(rules)) do
+  for _, key in ipairs(sorted_keys(rules)) do
     local value = rules[key]
     if type(value) == 'table' then
       nested[#nested + 1] = key
@@ -801,12 +806,12 @@ local function cssRule(selector, rules, out)
     local refs = key:gsub('%$([%w_]+)', '.%1-' .. HASH)
     if key:sub(1, 1) == '@' then
       local inner = {}
-      cssRule(selector, rules[key], inner)
+      css_rule(selector, rules[key], inner)
       out[#out + 1] = key .. ' { ' .. table.concat(inner, ' ') .. ' }'
     elseif refs:find('&', 1, true) then
-      cssRule((refs:gsub('&', function() return selector end)), rules[key], out)
+      css_rule((refs:gsub('&', function() return selector end)), rules[key], out)
     else
-      cssRule(selector .. ' ' .. refs, rules[key], out)
+      css_rule(selector .. ' ' .. refs, rules[key], out)
     end
   end
 end
@@ -815,36 +820,36 @@ end
 -- the rule's own selectors, as written (`from`, `50%`, ...), ex.
 -- `['@keyframes float'] = { from = { opacity = 0 }, to = { opacity = 1 } }`.
 -- Its name isn't hashed, so pick one that won't collide.
-local function isAtRule(name)
+local function is_at_rule(name)
   return name:sub(1, 1) == '@'
 end
 
 function M.css(rules)
   assert(type(rules) == 'table', 'markup: css requires a table of rules, by class name')
   local out = {}
-  for _, name in ipairs(sortedKeys(rules)) do
+  for _, name in ipairs(sorted_keys(rules)) do
     assert(type(rules[name]) == 'table', 'markup: css rules for ' .. name .. ' must be a table')
-    if isAtRule(name) then
+    if is_at_rule(name) then
       local inner = {}
-      for _, selector in ipairs(sortedKeys(rules[name])) do
-        cssRule(selector, rules[name][selector], inner)
+      for _, selector in ipairs(sorted_keys(rules[name])) do
+        css_rule(selector, rules[name][selector], inner)
       end
       out[#out + 1] = name .. ' { ' .. table.concat(inner, ' ') .. ' }'
     else
-      cssRule('.' .. name .. '-' .. HASH, rules[name], out)
+      css_rule('.' .. name .. '-' .. HASH, rules[name], out)
     end
   end
   local text = table.concat(out, '\n')
   local h = hash(text)
 
-  if not sheetHashes[h] then
-    sheetHashes[h] = true
+  if not sheet_hashes[h] then
+    sheet_hashes[h] = true
     sheets[#sheets + 1] = (text:gsub(HASH, h))
   end
 
   local names = {}
-  for _, name in ipairs(sortedKeys(rules)) do
-    if not isAtRule(name) then
+  for _, name in ipairs(sorted_keys(rules)) do
+    if not is_at_rule(name) then
       names[name] = name .. '-' .. h
     end
   end
@@ -880,7 +885,7 @@ function M.elements(src, tags)
   assert(type(tags) == 'table', 'markup: elements requires a table of tags, by name')
   local lib = { src = src, tags = {} }
   local components = {}
-  for _, name in ipairs(sortedKeys(tags)) do
+  for _, name in ipairs(sorted_keys(tags)) do
     local tag = tags[name]
     if type(tag) ~= 'string' or not tag:match('^%l[%l%d._%-]*%-[%l%d._%-]*$') then
       error('markup: elements: ' .. tostring(name) .. ' = ' .. tostring(tag) ..
@@ -888,8 +893,8 @@ function M.elements(src, tags)
     end
     lib.tags[#lib.tags + 1] = { name, tag }
     components[name] = function(props)
-      if not libSeen[lib] then
-        libSeen[lib] = true
+      if not lib_seen[lib] then
+        lib_seen[lib] = true
         libs[#libs + 1] = lib
       end
       local attrs = {}
@@ -911,10 +916,10 @@ function M.scripts()
   for _, lib in ipairs(libs) do
     local calls = {}
     for i, t in ipairs(lib.tags) do
-      calls[i] = 'r(' .. jsString(t[2]) .. ', ' .. jsString(t[1]) .. ');'
+      calls[i] = 'r(' .. js_string(t[2]) .. ', ' .. js_string(t[1]) .. ');'
     end
-    out[#out + 1] = '<script type="module">import * as m from ' .. jsString(lib.src) ..
-      '; const src = ' .. jsString(lib.src) .. '; ' .. REGISTER .. ' ' .. table.concat(calls, ' ') .. '</script>'
+    out[#out + 1] = '<script type="module">import * as m from ' .. js_string(lib.src) ..
+      '; const src = ' .. js_string(lib.src) .. '; ' .. REGISTER .. ' ' .. table.concat(calls, ' ') .. '</script>'
   end
   return table.concat(out)
 end
@@ -999,7 +1004,7 @@ local CLIENT = [[
 -- file). If it's missing, it's loaded from a cdn instead.
 local MORPH_CDN = 'https://unpkg.com/idiomorph@0.8.0/dist/idiomorph.min.js'
 
-local function vendoredMorph()
+local function vendored_morph()
   local ok, source = pcall(require, 'midnight.markup.idiomorph')
   if ok and type(source) == 'string' then
     return { inline = source }
@@ -1015,7 +1020,7 @@ end
 -- w/ `dispatch(id, data)` (what changed on the page).
 -- `headers` are sent along (ex. to find this page's state on the server). A
 -- 410 (gone) response reloads the page. `morph` is how updates are applied:
--- by default w/ idiomorph (inlined in the page, see `vendoredMorph`), a url
+-- by default w/ idiomorph (inlined in the page, see `vendored_morph`), a url
 -- to load it from instead, or false to swap elements (loses focus, etc.).
 --
 -- The host has to keep this lua state alive between the page and its actions
@@ -1026,7 +1031,7 @@ function M.mount(root, opts)
   assert(opts.rpc == nil or type(opts.rpc) == 'string', 'markup: mount: rpc must be a url (a string)')
   local morph = opts.morph
   if morph == nil then
-    morph = vendoredMorph()
+    morph = vendored_morph()
   elseif type(morph) == 'string' then
     morph = { src = morph }
   end
@@ -1037,9 +1042,9 @@ end
 -- Root elements that can't be replaced on their own (or be in a <template>).
 local DOCUMENT_TAGS = { html = true, head = true, body = true }
 
--- lastIndex returns where the last `needle` is in `s` (a plain search, which is
+-- last_index returns where the last `needle` is in `s` (a plain search, which is
 -- much faster than a pattern anchored at the end).
-local function lastIndex(s, needle)
+local function last_index(s, needle)
   local last
   local i = s:find(needle, 1, true)
   while i do
@@ -1053,9 +1058,9 @@ end
 -- comparing renders only needs their shells. So once a response is made, its
 -- buffer is dropped.
 local dispatching = false
-local function forgetHTML()
-  if P.lastRender then
-    for _, entry in pairs(P.lastRender.instances) do
+local function forget_html()
+  if P.last_render then
+    for _, entry in pairs(P.last_render.instances) do
       entry.own = nil
     end
   end
@@ -1102,7 +1107,7 @@ local function changed(before, after)
 
   local out = {}
   for _, id in ipairs(ids) do
-    out[#out + 1] = '<template data-midnight-target="' .. escape(id) .. '">' .. htmlOf(after.instances[id]) .. '</template>'
+    out[#out + 1] = '<template data-midnight-target="' .. escape(id) .. '">' .. html_of(after.instances[id]) .. '</template>'
   end
   return table.concat(out)
 end
@@ -1122,7 +1127,7 @@ function M.dispatch(id, data)
     return { headers = headers, body = M.document(P.mounted.root()) }
   end
 
-  local before, sent = P.lastRender, P.sentSheets
+  local before, sent = P.last_render, P.sent_sheets
   dispatching = true
   local ok, page = pcall(function()
     action(data or {})
@@ -1134,15 +1139,15 @@ function M.dispatch(id, data)
   end
 
   -- new styles (from `css` calls the page hasn't seen) need the whole page
-  local body = before and #sheets == sent and changed(before, P.lastRender) or page
-  forgetHTML()
+  local body = before and #sheets == sent and changed(before, P.last_render) or page
+  forget_html()
   return { headers = headers, body = body }
 end
 
--- isInteractive returns whether the last render of a mounted page had any
+-- is_interactive returns whether the last render of a mounted page had any
 -- actions (if not, the page is static: it never calls the server back, so
 -- there's nothing to keep around for it).
-function M.isInteractive()
+function M.is_interactive()
   return P.mounted ~= nil and next(P.actions) ~= nil
 end
 
@@ -1160,7 +1165,7 @@ local Session = {}
 Session.__index = Session
 
 function M.session()
-  return setmetatable({ page = newPage() }, Session)
+  return setmetatable({ page = new_page() }, Session)
 end
 
 -- render(root) renders `root()` (or `root`, a node) w/ this session's state,
@@ -1200,8 +1205,8 @@ function Session:dispatch(id, data)
   return true
 end
 
--- isInteractive returns whether the last render had any actions.
-function Session:isInteractive()
+-- is_interactive returns whether the last render had any actions.
+function Session:is_interactive()
   return next(self.page.actions) ~= nil
 end
 
@@ -1211,32 +1216,32 @@ function M.document(node)
   local html = M.render(node)
   local styles = M.styles() .. M.scripts()
   if styles ~= '' then
-    local headEnd = html:find('</head>', 1, true)
-    local _, htmlStart = html:find('^%s*<html[^>]*>')
-    if headEnd then
-      html = html:sub(1, headEnd - 1) .. styles .. html:sub(headEnd)
-    elseif htmlStart then -- <html> w/o a <head>
-      html = html:sub(1, htmlStart) .. '<head>' .. styles .. '</head>' .. html:sub(htmlStart + 1)
+    local head_end = html:find('</head>', 1, true)
+    local _, html_start = html:find('^%s*<html[^>]*>')
+    if head_end then
+      html = html:sub(1, head_end - 1) .. styles .. html:sub(head_end)
+    elseif html_start then -- <html> w/o a <head>
+      html = html:sub(1, html_start) .. '<head>' .. styles .. '</head>' .. html:sub(html_start + 1)
     else
       html = styles .. html
     end
   end
   html = '<!DOCTYPE html>' .. html
   if P.mounted then
-    P.sentSheets = #sheets
+    P.sent_sheets = #sheets
     if not dispatching then
-      forgetHTML()
+      forget_html()
     end
   end
-  if not M.isInteractive() then
+  if not M.is_interactive() then
     return html
   end
 
   local headers = {}
-  for _, key in ipairs(sortedKeys(P.mounted.headers)) do
-    headers[#headers + 1] = jsString(key) .. ': ' .. jsString(P.mounted.headers[key])
+  for _, key in ipairs(sorted_keys(P.mounted.headers)) do
+    headers[#headers + 1] = js_string(key) .. ': ' .. js_string(P.mounted.headers[key])
   end
-  local rpc = P.mounted.rpc and jsString(P.mounted.rpc) or 'null'
+  local rpc = P.mounted.rpc and js_string(P.mounted.rpc) or 'null'
   local cfg = '{ rpc: ' .. rpc .. ', headers: { ' .. table.concat(headers, ', ') .. ' } }'
   local script = '<script>' .. CLIENT:format(cfg) .. '</script>'
   if P.mounted.morph and P.mounted.morph.src then
@@ -1244,9 +1249,9 @@ function M.document(node)
   elseif P.mounted.morph then
     script = '<script>' .. P.mounted.morph.inline .. '</script>' .. script
   end
-  local bodyEnd = lastIndex(html, '</body>') or lastIndex(html, '</html>')
-  if bodyEnd then
-    return html:sub(1, bodyEnd - 1) .. script .. html:sub(bodyEnd)
+  local body_end = last_index(html, '</body>') or last_index(html, '</html>')
+  if body_end then
+    return html:sub(1, body_end - 1) .. script .. html:sub(body_end)
   end
   return html .. script
 end

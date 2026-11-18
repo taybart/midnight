@@ -34,6 +34,9 @@ Rules:
                     a '=>' function that builds markup but doesn't use self
                     (a component's props would be self, use '->')
   syntax            the file doesn't parse
+  snake-case        a camelCase local, parameter, loop variable, or module /
+                    global name (PascalCase and SCREAMING_CASE are fine, table
+                    fields aren't checked; off w/ -snake-case=false)
 
 Add '` + lintIgnoreComment + `' in a comment to ignore a line.
 
@@ -43,15 +46,19 @@ the *.lua files in 'workspace.library'.
 
 Available options are:
   -g list  additional globals, comma separated (ex. ones set by the host)
+  -snake-case=false
+           allow camelCase names (turns off the snake-case rule)
   -markup-factory name
            function markup elements call (default: h, see docs/MARKUP.md)`
 
 // lintCommand implements `midnight lint`.
 func lintCommand(args []string) int {
 	var opt_g string
+	var opt_snake bool
 	var midnightOpts parse.MidnightOptions
 	flags := flag.NewFlagSet("lint", flag.ContinueOnError)
 	flags.StringVar(&opt_g, "g", "", "")
+	flags.BoolVar(&opt_snake, "snake-case", true, "")
 	flags.Var(markupFactoryFlag{&midnightOpts}, "markup-factory", "")
 	flags.SetOutput(io.Discard)
 	flags.Usage = func() {}
@@ -65,7 +72,7 @@ func lintCommand(args []string) int {
 		return 1
 	}
 
-	var lintOpts lint.Options
+	lintOpts := lint.Options{CamelCase: !opt_snake}
 	for _, name := range strings.Split(opt_g, ",") {
 		if name = strings.TrimSpace(name); name != "" {
 			lintOpts.Globals = append(lintOpts.Globals, name)

@@ -161,6 +161,8 @@ so they can never clash w/ user names; a source printer must rename them).
 | `global x = 1`, later `x` | `_G.x = 1`, later `_G.x` |
 | `global function f() {}` | `_G.f = function() end` |
 | `module x = 1`, later `x` | `_MODULE.x = 1`, later `_MODULE.x`, w/ `local _MODULE = {}` at the start of the chunk and `return _MODULE` at the end |
+| `x` before `module x = 1` (hoisted, not in Erde) | `_MODULE.x`: collect top-level `module` names in a first pass, and declare them in the root scope |
+| `module.x` (not in Erde) | `_MODULE.x`, even if a local `x` is in scope (`module` followed by `.` isn't a declaration) |
 | `local function f() {}` | `local function f() end` (`f` can refer to itself) |
 | `if`, `for`, `while`, `repeat`, `do`, `goto`, `::label::` | same as Lua, w/ braces |
 

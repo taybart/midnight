@@ -29,6 +29,8 @@ const (
 	// `a && b || c` where b can be nil or false: it's then c, even when a is
 	// true (use an if expression)
 	RuleAndOr = "and-or"
+	// a camelCase name where it's declared (see Options.CamelCase)
+	RuleSnakeCase = "snake-case"
 )
 
 type Diagnostic struct {
@@ -41,6 +43,13 @@ type Options struct {
 	// Additional globals that may be read and set (ex. ones provided by the
 	// host program).
 	Globals []string
+	// Allow camelCase names. Otherwise they're reported where they're
+	// declared: locals, parameters, loop variables, and `module` / `global`
+	// names (RuleSnakeCase). PascalCase (components, classes) and
+	// SCREAMING_CASE are always fine, and table fields and methods aren't
+	// checked, since they often have to match something else (ex. JSON, or a
+	// host's API).
+	CamelCase bool
 }
 
 // StandardGlobals are the globals defined by Lua (5.1 - 5.5), LuaJIT, and
@@ -82,6 +91,11 @@ type globalRef struct {
 }
 
 type checker struct {
+	snakeCase bool
+	// module / global names already reported by the snake-case rule (they
+	// can be assigned more than once)
+	snakeReported map[string]bool
+
 	scopes      []*scope
 	globals     map[string]bool
 	globalSets  map[string]bool
@@ -97,7 +111,12 @@ type function struct {
 
 // Check lints a chunk. Diagnostics are sorted by line.
 func Check(chunk []ast.Stmt, opts Options) []Diagnostic {
-	c := &checker{globals: map[string]bool{}, globalSets: map[string]bool{}}
+	c := &checker{
+		globals:       map[string]bool{},
+		globalSets:    map[string]bool{},
+		snakeCase:     !opts.CamelCase,
+		snakeReported: map[string]bool{},
+	}
 	for _, name := range StandardGlobals {
 		c.globals[name] = true
 	}
@@ -155,7 +174,60 @@ func (c *checker) lookup(name string) *variable {
 	return nil
 }
 
+// isCamelCase checks for a name that starts lowercase and has an uppercase
+// letter (ex. `pageFor`, `_fooBar`), so not snake_case, PascalCase, or
+// SCREAMING_CASE.
+func isCamelCase(name string) bool {
+	name = strings.TrimLeft(name, "_")
+	return name != "" && 'a' <= name[0] && name[0] <= 'z' && strings.ContainsAny(name, "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+}
+
+// snakeCase returns name in snake_case (ex. `pageFor` -> `page_for`,
+// `forgetHTML` -> `forget_html`).
+func snakeCase(name string) string {
+	var b strings.Builder
+	for i := 0; i < len(name); i++ {
+		ch := name[i]
+		if 'A' <= ch && ch <= 'Z' {
+			prevLower := i > 0 && ('a' <= name[i-1] && name[i-1] <= 'z' || '0' <= name[i-1] && name[i-1] <= '9')
+			nextLower := i+1 < len(name) && 'a' <= name[i+1] && name[i+1] <= 'z'
+			prevUpper := i > 0 && 'A' <= name[i-1] && name[i-1] <= 'Z'
+			if prevLower || (prevUpper && nextLower) {
+				b.WriteByte('_')
+			}
+			ch += 'a' - 'A'
+		}
+		b.WriteByte(ch)
+	}
+	return b.String()
+}
+
+func (c *checker) checkSnakeCase(name string, line int) {
+	if c.snakeCase && !isInternal(name) && isCamelCase(name) {
+		c.report(line, RuleSnakeCase, "'"+name+"' isn't snake_case ("+snakeCase(name)+")")
+	}
+}
+
+// checkSnakeCaseTarget checks the name a `module x` / `global x` declaration
+// sets (`_MODULE.x` / `_G.x`, after lowering), once per name.
+func (c *checker) checkSnakeCaseTarget(expr ast.Expr) {
+	attr, ok := expr.(*ast.AttrGetExpr)
+	if !ok || !c.snakeCase {
+		return
+	}
+	object, ok := attr.Object.(*ast.IdentExpr)
+	key, isString := attr.Key.(*ast.StringExpr)
+	if !ok || !isString || (object.Value != "_MODULE" && object.Value != "_G") {
+		return
+	}
+	if !c.snakeReported[key.Value] {
+		c.snakeReported[key.Value] = true
+		c.checkSnakeCase(key.Value, attr.Line())
+	}
+}
+
 func (c *checker) declare(name string, line int, kind varKind) {
+	c.checkSnakeCase(name, line)
 	if !isInternal(name) && !isIgnored(name) && name != "self" {
 		current := c.scopes[len(c.scopes)-1]
 		if prev, ok := current.vars[name]; ok {
@@ -274,6 +346,7 @@ func (c *checker) stmt(stmt ast.Stmt) {
 func (c *checker) assignTarget(expr ast.Expr) {
 	ident, ok := expr.(*ast.IdentExpr)
 	if !ok {
+		c.checkSnakeCaseTarget(expr)
 		c.expr(expr)
 		return
 	}

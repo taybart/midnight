@@ -545,9 +545,9 @@ func TestMidnightMarkupStaticPage(t *testing.T) {
 	defer L.Close()
 	source := `local markup = require('midnight.markup')
 local static = markup.document(markup.mount(() -> <p>hi</p>, { rpc = '/' }))
-local staticInteractive = markup.isInteractive()
+local static_interactive = markup.is_interactive()
 local live = markup.document(markup.mount(() -> <b onclick={() -> {}}/>, { rpc = '/' }))
-return static, tostring(staticInteractive), tostring(markup.isInteractive()), tostring(live:find('<script>', 1, true) != nil)`
+return static, tostring(static_interactive), tostring(markup.is_interactive()), tostring(live:find('<script>', 1, true) != nil)`
 	if err := L.DoMidnightString(source); err != nil {
 		t.Fatal(err)
 	}
@@ -598,16 +598,16 @@ local static = markup.document(markup.mount(() -> <App/>, { rpc = '/' }))
 local live = markup.document(markup.mount(() -> <App live/>, { rpc = '/', morph = false }))
 local s = markup.session()
 local session = s:render(() -> <App/>)
-local sessionLive = s:render(() -> <App live/>)
-return static, live, session, sessionLive`
+local session_live = s:render(() -> <App live/>)
+return static, live, session, session_live`
 	if err := L.DoMidnightString(source); err != nil {
 		t.Fatal(err)
 	}
-	static, live, session, sessionLive := L.Get(-4).String(), L.Get(-3).String(), L.Get(-2).String(), L.Get(-1).String()
+	static, live, session, session_live := L.Get(-4).String(), L.Get(-3).String(), L.Get(-2).String(), L.Get(-1).String()
 	if want := `<!DOCTYPE html><main><ul><li>a</li><li>b</li><i data-midnight="n1:`; !strings.HasPrefix(static, want) || strings.Count(static, "data-midnight") != 1 {
 		t.Errorf("static page:\n  got  %s\n  want %s...", static, want)
 	}
-	for name, html := range map[string]string{"live": live, "live session": sessionLive} {
+	for name, html := range map[string]string{"live": live, "live session": session_live} {
 		if !strings.Contains(html, `<main data-midnight="r:`) || !strings.Contains(html, `<li data-midnight="r:1.1:2.1.ka:3"`) {
 			t.Errorf("%s page: missing data-midnight\n%s", name, html)
 		}
@@ -793,7 +793,7 @@ local submit = first:match('data%-mn%-submit="([^"]+)"')
 assert(a:dispatch(id, {}), 'dispatch a')
 assert(a:dispatch(submit, { form = { by = '10' } }), 'submit a')
 local stale = a:dispatch('r:9#9', {})
-return first, a:rerender(), b:rerender(), tostring(stale), tostring(a:isInteractive()), markup.render(<Counter label="plain"/>)`
+return first, a:rerender(), b:rerender(), tostring(stale), tostring(a:is_interactive()), markup.render(<Counter label="plain"/>)`
 	if err := L.DoMidnightString(source); err != nil {
 		t.Fatal(err)
 	}

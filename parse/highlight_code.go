@@ -107,6 +107,8 @@ func highlightMidnight(text string) []CodeSpan {
 				class = ClassBuiltin
 			case word == "match" && j >= 0 && nextKind != HlSymbol:
 				class = ClassKeyword // (only a keyword before its value)
+			case word == "catch" && i > 0 && j >= 0 && (nextKind != HlSymbol || nextText == "{"):
+				class = ClassKeyword // (only a keyword before its handler, see isCatch)
 			case (word == "class" || word == "static" || word == "goto") && nextKind == HlWord && !newline:
 				class = ClassKeyword // (contextual: only before a name, see isClassDeclaration)
 			case nextKind == HlSymbol && nextText == "(":

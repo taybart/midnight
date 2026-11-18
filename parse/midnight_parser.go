@@ -87,9 +87,19 @@ type midnightParser struct {
 	// Local holding the automatic markup factory (see markupFactory), or "" if
 	// unused.
 	markupRuntime string
-	// if / match expressions, by the expression they were parsed to, so they
-	// can be lowered to statements where they're used (see midnight_cond.go).
-	conds map[ast.Expr]*midnightCond
+	// if / match / catch expressions, by the expression they were parsed to,
+	// so they can be lowered to statements where they're used (see
+	// midnight_cond.go).
+	lowered map[ast.Expr]midnightLowerable
+	// Lowering into a target in the enclosing function (see hoist).
+	hoisting bool
+	// catch expressions whose handler exits (`catch e { return nil, e }`),
+	// which must be hoisted (see midnight_catch.go).
+	exitingCatches []*midnightCatch
+	// Token index of the `{` starting the block of the statement whose header
+	// is being parsed (ex. `if <header> {`), which can't start a catch body
+	// (-1 outside of headers, see header).
+	headerBraceIndex int
 
 	// Parent of the class being declared (`super`), or nil (see
 	// midnight_class.go).
@@ -99,6 +109,8 @@ type midnightParser struct {
 	isModuleReturnBlock bool
 	moduleReturnLine    int
 	hasModuleDecls      bool
+	// Names declared w/ `module` at the top level, in declaration order.
+	moduleNames []string
 }
 
 // Result of parsing an index chain (ex. `a.b[c]:d()`).
@@ -136,18 +148,41 @@ func ParseMidnightWithOptions(reader io.Reader, name string, opts MidnightOption
 		return nil, err
 	}
 
-	p := &midnightParser{
+	// Module names are hoisted: they're visible in the whole file, not just
+	// after their declaration (they're fields of the module table, so they're
+	// looked up when used, same as `M.x` in Lua). A first pass collects them.
+	var hoisted []string
+	if midnightHasModuleKeyword(tokens) {
+		pre := newMidnightParser(name, tokens, opts, nil)
+		if _, err := pre.run(); err != nil {
+			return nil, err
+		}
+		hoisted = pre.moduleNames
+	}
+
+	return newMidnightParser(name, tokens, opts, hoisted).run()
+}
+
+func newMidnightParser(name string, tokens []midnightToken, opts MidnightOptions, moduleNames []string) *midnightParser {
+	root := map[string]string{}
+	for _, n := range moduleNames {
+		root[n] = midnightScopeModule
+	}
+	return &midnightParser{
 		source:              name,
 		tokens:              tokens,
 		cur:                 tokens[0],
 		blockDepth:          1,
-		scopes:              []map[string]string{{}},
+		scopes:              []map[string]string{root},
 		isVarargs:           true,
 		isModuleReturnBlock: true,
 		opts:                opts,
 		armArrowIndex:       -1,
+		headerBraceIndex:    -1,
 	}
+}
 
+func (p *midnightParser) run() (chunk []ast.Stmt, err error) {
 	defer func() {
 		if e := recover(); e != nil {
 			if perr, ok := e.(*Error); ok {
@@ -159,6 +194,15 @@ func ParseMidnightWithOptions(reader io.Reader, name string, opts MidnightOption
 	}()
 
 	return p.module(), nil
+}
+
+func midnightHasModuleKeyword(tokens []midnightToken) bool {
+	for _, t := range tokens {
+		if t.Type == midnightWord && t.Value == "module" {
+			return true
+		}
+	}
+	return false
 }
 
 /* Parse helpers {{{ */
@@ -286,7 +330,12 @@ func (p *midnightParser) pushScope() { p.scopes = append(p.scopes, map[string]st
 
 func (p *midnightParser) popScope() { p.scopes = p.scopes[:len(p.scopes)-1] }
 
-func (p *midnightParser) declare(name, scope string) { p.scopes[len(p.scopes)-1][name] = scope }
+func (p *midnightParser) declare(name, scope string) {
+	if scope == midnightScopeModule && len(p.scopes) == 1 {
+		p.moduleNames = append(p.moduleNames, name)
+	}
+	p.scopes[len(p.scopes)-1][name] = scope
+}
 
 func (p *midnightParser) lookup(name string) string {
 	for i := len(p.scopes) - 1; i >= 0; i-- {
@@ -306,6 +355,23 @@ func (p *midnightParser) target(name, scope string, line int) ast.Expr {
 		return midnightAttr(midnightIdent("_G", line), midnightString(name, line), line)
 	}
 	return midnightIdent(name, line)
+}
+
+// isModuleAccess checks for `module.x`, which always refers to the module's
+// `x` (ex. when a local of the same name shadows it).
+func (p *midnightParser) isModuleAccess() bool {
+	return p.is("module") && isMidnightSyntax(p.tokens[p.index+1], ".")
+}
+
+// nameExpr parses the name starting an index chain: a name in scope, or
+// `module` in `module.x`.
+func (p *midnightParser) nameExpr(line int) ast.Expr {
+	if p.isModuleAccess() {
+		p.consume()
+		p.hasModuleDecls = true
+		return midnightIdent(midnightModuleName, line)
+	}
+	return p.resolve(p.name(), line)
 }
 
 func (p *midnightParser) resolve(name string, line int) ast.Expr {
@@ -934,7 +1000,7 @@ func (p *midnightParser) terminalExpression() ast.Expr {
 		return p.indexChain(p.parenthesizedExpression()).expr
 	}
 
-	return p.indexChain(p.resolve(p.name(), line)).expr
+	return p.indexChain(p.nameExpr(line)).expr
 }
 
 func (p *midnightParser) parenthesizedExpression() ast.Expr {
@@ -1003,6 +1069,10 @@ func (p *midnightParser) expression(minPrec int) ast.Expr {
 		}
 	}
 
+	for minPrec <= midnightCatchPrec && p.isCatch() {
+		expr = p.catchExpression(expr)
+	}
+
 	return expr
 }
 
@@ -1055,7 +1125,8 @@ func (p *midnightParser) forLoop() ast.Stmt {
 		p.consume() // =
 
 		exprsLine := p.cur.Line
-		exprs := p.expressionList()
+		var exprs []ast.Expr
+		p.header(func() { exprs = p.expressionList() })
 		if len(exprs) != 2 && len(exprs) != 3 {
 			p.throw(exprsLine, "invalid numeric for, expected 2-3 expressions, got %d", len(exprs))
 		}
@@ -1091,7 +1162,8 @@ func (p *midnightParser) forLoop() ast.Stmt {
 	})
 
 	p.expect("in")
-	exprs := p.expressionList()
+	var exprs []ast.Expr
+	p.header(func() { exprs = p.expressionList() })
 
 	p.pushScope()
 	for _, name := range declared {
@@ -1107,13 +1179,13 @@ func (p *midnightParser) ifElse() ast.Stmt {
 	line := p.cur.Line
 	p.consume() // if
 
-	root := midnightLine(&ast.IfStmt{Condition: p.expression(1), Then: p.braceBlock(), Else: []ast.Stmt{}}, line)
+	root := midnightLine(&ast.IfStmt{Condition: p.headerExpression(), Then: p.braceBlock(), Else: []ast.Stmt{}}, line)
 	last := root
 
 	for p.is("elseif") {
 		elseifLine := p.cur.Line
 		p.consume()
-		elseif := midnightLine(&ast.IfStmt{Condition: p.expression(1), Then: p.braceBlock(), Else: []ast.Stmt{}}, elseifLine)
+		elseif := midnightLine(&ast.IfStmt{Condition: p.headerExpression(), Then: p.braceBlock(), Else: []ast.Stmt{}}, elseifLine)
 		last.Else = []ast.Stmt{elseif}
 		last = elseif
 	}
@@ -1167,7 +1239,7 @@ func (p *midnightParser) matchStatement() ast.Stmt {
 
 	subjectName := p.newTmpName()
 	subject := midnightIdent(subjectName, line)
-	stmts := []ast.Stmt{midnightLocal([]string{subjectName}, []ast.Expr{p.expression(1)}, line)}
+	stmts := []ast.Stmt{midnightLocal([]string{subjectName}, []ast.Expr{p.headerExpression()}, line)}
 
 	var root, last *ast.IfStmt
 	var fallback []ast.Stmt
@@ -1295,7 +1367,7 @@ func (p *midnightParser) assignmentChain() *midnightChain {
 	}
 
 	line := p.cur.Line
-	return p.indexChain(p.resolve(p.name(), line))
+	return p.indexChain(p.nameExpr(line))
 }
 
 var midnightAssignmentOperators = map[string]bool{
@@ -1499,7 +1571,7 @@ func (p *midnightParser) statement() []ast.Stmt {
 		stmts = []ast.Stmt{p.forLoop()}
 	case p.is("while"):
 		p.consume()
-		condition := p.expression(1)
+		condition := p.headerExpression()
 		stmts = []ast.Stmt{p.closed(midnightLine(&ast.WhileStmt{Condition: condition, Stmts: p.loopBlock()}, line))}
 	case p.is("repeat"):
 		p.consume()
@@ -1512,7 +1584,7 @@ func (p *midnightParser) statement() []ast.Stmt {
 		stmts = []ast.Stmt{p.functionDeclaration("")}
 	case p.isClassDeclaration():
 		stmts = p.classDeclaration("")
-	case p.is("local"), p.is("global"), p.is("module"):
+	case p.is("local"), p.is("global"), p.is("module") && !p.isModuleAccess():
 		scope := p.consume()
 
 		if scope == midnightScopeModule {
@@ -1531,7 +1603,9 @@ func (p *midnightParser) statement() []ast.Stmt {
 		}
 	default:
 		chain := p.assignmentChain()
-		if chain.isCall {
+		if chain.isCall && p.isCatch() {
+			stmts = []ast.Stmt{p.catchStatement(chain.expr)}
+		} else if chain.isCall {
 			stmts = []ast.Stmt{midnightLine(&ast.FuncCallStmt{Expr: chain.expr}, line)}
 		} else {
 			stmts = p.variableAssignment(chain, line)
@@ -1547,6 +1621,7 @@ func (p *midnightParser) module() []ast.Stmt {
 	for p.cur.Type != midnightEOF {
 		stmts = append(stmts, p.statement()...)
 	}
+	p.checkExitingCatches()
 
 	if p.hasModuleDecls {
 		if p.moduleReturnLine != 0 {

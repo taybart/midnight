@@ -66,13 +66,13 @@ local function render(v)
   local root
   if type(v) == 'function' then
     root = function() return m.h(v, {}) end -- a component
-  elseif m.isElement(v) then
+  elseif m.is_element(v) then
     root = function() return v end -- (its components render again each time)
   else
     return nil
   end
   local html = m.document(m.mount(root, { rpc = '` + rpcPath + `' }))
-  return html, m.isInteractive()
+  return html, m.is_interactive()
 end
 local function dispatch(id, data)
   return m.dispatch(id, data).body

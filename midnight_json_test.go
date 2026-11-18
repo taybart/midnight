@@ -9,7 +9,7 @@ import (
 	"github.com/taybart/midnight/parse"
 )
 
-const jsonPrelude = "local { render, json, jsonText, array, object, Data } = require('midnight.markup')\n"
+const jsonPrelude = "local { render, json, json_text, array, object, Data } = require('midnight.markup')\n"
 
 // JSON <script>s: the expression is encoded when rendered (see markup.lua).
 var midnightJSONCases = []struct {
@@ -43,8 +43,18 @@ var midnightJSONCases = []struct {
 	{`return render(<script type="application/json">{not_defined}</script>)`, `<script type="application/json">null</script>`},
 	// already encoded values pass through
 	{`return render(<Data value={json({ 1 })}/>)`, `<script type="application/json">[1]</script>`},
-	{`return render(<script type="application/json">{jsonText('{"from":"go"}')}</script>)`,
+	{`return render(<script type="application/json">{json_text('{"from":"go"}')}</script>)`,
 		`<script type="application/json">{"from":"go"}</script>`},
+	// an import map is JSON too: an expression is encoded (ex. to share a
+	// versioned url w/ a modulepreload), and JSON text passes through as is
+	{"return render(<script type=\"importmap\">{{ imports = { ['@taybart/corvid'] = '/js/corvid.js?v=1' } }}</script>)",
+		`<script type="importmap">{"imports":{"@taybart/corvid":"/js/corvid.js?v=1"}}</script>`},
+	{"local url = '/a.js'; return render(<script type='importmap'>{{ imports = { a = url } }}</script>)",
+		`<script type="importmap">{"imports":{"a":"/a.js"}}</script>`},
+	{"return render(<script type=\"importmap\">{ \"imports\": { \"a\": \"/a.js\" } }</script>)",
+		`<script type="importmap">{ "imports": { "a": "/a.js" } }</script>`},
+	{"return render(<script type=\"importmap\">\n  {\n    \"imports\": { \"a\": \"/a.js\" }\n  }\n</script>)",
+		"<script type=\"importmap\">\n  {\n    \"imports\": { \"a\": \"/a.js\" }\n  }\n</script>"},
 	// other scripts are still raw text
 	{`return render(<script>if (a < b) { go() }</script>)`, `<script>if (a < b) { go() }</script>`},
 	{`return render(<script type="application/ld+json">{"@type": "Thing"}</script>)`,
@@ -107,6 +117,7 @@ func TestMidnightJSONSyntaxErrors(t *testing.T) {
 		`return <script type="application/json">{"a": 1}</script>`,
 		`return <script type="application/json">[1, 2]</script>`,
 		`return <script type="application/json">{a} {b}</script>`,
+		`return <script type="importmap">{a} {b}</script>`,
 	} {
 		_, err := parse.ParseMidnight(strings.NewReader(source), "<string>")
 		if err == nil || !strings.Contains(err.Error(), `holds one {expression}`) {
@@ -133,7 +144,7 @@ var midnightDefineVarsCases = []struct {
 }{
 	{"return render(<script define:vars={{ repos = { 'a' }, n = 3 }}>go(repos, n)</script>)",
 		"<script>const n = JSON.parse('3');\nconst repos = JSON.parse('[\"a\"]');\ngo(repos, n)</script>"},
-	{"return render(<script type=\"module\" define:vars={{ x = jsonText('{\"from\":\"go\"}') }}>use(x)</script>)",
+	{"return render(<script type=\"module\" define:vars={{ x = json_text('{\"from\":\"go\"}') }}>use(x)</script>)",
 		"<script type=\"module\">const x = JSON.parse('{\"from\":\"go\"}');\nuse(x)</script>"},
 	// quotes and backslashes are escaped for the js string, `<` for the html
 	{"return render(<script define:vars={{ s = \"it's </script> \\\\\" }}>s</script>)",

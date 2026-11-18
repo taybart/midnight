@@ -129,7 +129,7 @@ func (lx *midnightLexer) markupElement() {
 
 	lx.markupName(HlTag)
 	tag := lx.tokens[len(lx.tokens)-1].Value
-	jsonScript := false // <script type="application/json">, see markupJSON
+	jsonScript := "" // <script type="application/json"> (or "importmap"), see markupJSON
 
 	for {
 		lx.markupSpace()
@@ -144,8 +144,11 @@ func (lx *midnightLexer) markupElement() {
 			lx.emit(midnightMarkup, ">", lx.line)
 			lx.mark(HlMarkup, 1)
 			lx.pos++
-			if jsonScript {
-				lx.markupJSON()
+			if jsonScript == "importmap" && lx.isJSONText() {
+				// (an import map written as JSON, as is: the usual way)
+				lx.markupRawText(tag)
+			} else if jsonScript != "" {
+				lx.markupJSON(jsonScript)
 			} else if markupRawTextTags[tag] {
 				lx.markupRawText(tag)
 			}
@@ -168,10 +171,14 @@ func (lx *midnightLexer) markupElement() {
 			switch lx.peek(0) {
 			case '"':
 				lx.doubleQuoteString()
-				jsonScript = jsonScript || tag == "script" && attr == "type" && lx.text[valueStart:lx.pos] == `"application/json"`
+				if tag == "script" && attr == "type" {
+					jsonScript = markupJSONScriptType(lx.text[valueStart+1:lx.pos-1], jsonScript)
+				}
 			case '\'':
 				lx.singleQuoteString()
-				jsonScript = jsonScript || tag == "script" && attr == "type" && lx.text[valueStart:lx.pos] == `'application/json'`
+				if tag == "script" && attr == "type" {
+					jsonScript = markupJSONScriptType(lx.text[valueStart+1:lx.pos-1], jsonScript)
+				}
 			case '{':
 				lx.markupExpression()
 			default:
@@ -206,14 +213,33 @@ func (lx *midnightLexer) markupRawText(tag string) {
 	}
 }
 
+// markupJSONScriptTypes are the <script> types whose content is JSON, so a
+// `{expression}` in them is encoded as JSON (see markupJSON).
+var markupJSONScriptTypes = map[string]bool{"application/json": true, "importmap": true}
+
+// markupJSONScriptType returns typ if it's a JSON script type, else current.
+func markupJSONScriptType(typ, current string) string {
+	if markupJSONScriptTypes[typ] {
+		return typ
+	}
+	return current
+}
+
+// isJSONText checks for JSON text (`{"key":`, after any whitespace) at the
+// current position, w/o moving.
+func (lx *midnightLexer) isJSONText() bool {
+	return markupJSONText.MatchString(strings.TrimLeft(lx.text[lx.pos:], " \t\r\n"))
+}
+
 // markupJSONText is the start of JSON text (`{"key":`), which would otherwise
 // be a confusing syntax error in the expression.
 var markupJSONText = regexp.MustCompile(`^\{\s*("[^"\n]*"|'[^'\n]*')\s*:`)
 
-// markupJSON lexes the content of a `<script type="application/json">`: one
-// `{expression}`, which the runtime encodes as JSON when it's rendered (so
-// unlike other scripts, it isn't raw text).
-func (lx *midnightLexer) markupJSON() {
+// markupJSON lexes the content of a `<script type="application/json">` (or
+// "importmap", unless it's written as JSON text): one `{expression}`, which
+// the runtime encodes as JSON when it's rendered (so unlike other scripts, it
+// isn't raw text).
+func (lx *midnightLexer) markupJSON(typ string) {
 	space := func() {
 		for !lx.eof() && strings.IndexByte(" \t\r\n", lx.peek(0)) >= 0 {
 			if lx.peek(0) == '\n' {
@@ -224,14 +250,14 @@ func (lx *midnightLexer) markupJSON() {
 	}
 	space()
 	if markupJSONText.MatchString(lx.text[lx.pos:]) {
-		lx.throw(lx.line, `a <script type="application/json"> holds one {expression}, encoded as JSON, not JSON text (write a table: {{ a = 1 }})`)
+		lx.throw(lx.line, `a <script type="%s"> holds one {expression}, encoded as JSON, not JSON text (write a table: {{ a = 1 }})`, typ)
 	}
 	if lx.peek(0) == '{' {
 		lx.markupExpression()
 		space()
 	}
 	if lx.peek(0) != '<' || lx.peek(1) != '/' {
-		lx.throw(lx.line, `a <script type="application/json"> holds one {expression}, encoded as JSON (ex. {data})`)
+		lx.throw(lx.line, `a <script type="%s"> holds one {expression}, encoded as JSON (ex. {data})`, typ)
 	}
 }
 

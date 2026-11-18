@@ -50,7 +50,7 @@ integrations and CI).
 ## Language additions
 
 Besides Erde's syntax, Midnight has `match` statements, `if` / `match`
-expressions, interpolation formats, markup elements, and classes.
+expressions, `catch`, interpolation formats, markup elements, and classes.
 Scripts that use them only run on midnight (or as `midnight -c` output).
 
 ### `match`
@@ -137,6 +137,62 @@ or `false` (`if admin { title } else { 'member' }` is `title`, nil or not).
   when its subject starts on the same line and is followed by `{` and an arm
   (`... =>`). So `match - 1` and `local y = match` are names, and
   `match #rows { ... }` is a match.
+
+### `catch`
+
+`expr catch handler` evaluates `expr` in protected mode (`pcall`), and if it
+throws, the handler instead:
+
+```midnight
+local cfg  = load_config(path) catch DEFAULTS              -- fallback value
+local n    = tonumber(s) catch e { log(e) }                -- value, w/ the error as `e`
+local data = json.decode(body) catch e { return nil, e }   -- statements that exit
+local v    = parse(line) catch { continue }                -- (in a loop)
+local x    = risky() catch nil                             -- ignore the error, on purpose
+
+risky() catch e { log.warn(e) }                            -- as a statement
+risky() catch {}                                           -- ignore the error
+```
+
+As the value of a declaration, assignment, or return, it compiles to plain
+statements, ex. `local data = json.decode(body) catch e { return nil, e }`:
+
+```lua
+local tmp
+do
+  local ok, v = pcall(function() return json.decode(body) end)
+  if ok then tmp = v else local e = v; return nil, e end
+end
+local data = tmp
+```
+
+(`f(a, b) catch ...`, where `f` and its arguments are names or constants, is
+`pcall(f, a, b)`, w/o the function.)
+
+- The handler is an expression (the value on an error), or `[name] { ... }`
+  w/ the error as `name`. The block is either one expression (the value), or
+  statements that exit: they end in `return`, `break`, `continue`, `goto`,
+  or `error(...)` (or an `if` whose branches all do).
+- Statements in the handler run in the enclosing function, so `return`
+  returns from it, and `break` / `continue` apply to the enclosing loop. So
+  a handler w/ statements only works as the (first) value of a declaration,
+  assignment, or return. Anywhere else (ex. an argument), a catch is in a
+  function that's called right away, like an [if / match
+  expression](#if--match-expressions), so only a value works there.
+- There's no way to drop the error by accident: ignoring it is `catch nil`
+  (or `catch {}` as a statement).
+- `catch` binds looser than any operator, so `a + f() catch 0` protects
+  `a + f()`. It chains: `a() catch b() catch c` tries `a()`, then `b()`.
+- `expr` and the handler's value are truncated to one value.
+- A block always starts a handler: an empty table is `catch { {} }` (or
+  `catch ({})`).
+- In a statement header (`if`, `elseif`, `while`, `for`, `match`), a catch
+  doesn't have a block, since the `{` starts the statement's:
+  `if f() catch false { ... }`. Use parentheses for a block there.
+- `catch` is a contextual keyword, so code that uses it as a name keeps
+  working (`local catch = 1`, `t.catch`, `catch(x)`). At the start of a line,
+  `catch` followed by `=`, `,`, `.`, `[`, `:`, `(`, or an assignment operator
+  is still a name.
 
 ### Interpolation formats
 
@@ -334,6 +390,13 @@ differences:
   error rewriting needed).
 - **Compound assignment evaluates index chains once.** `t[f()] += 1` calls `f`
   once (the reference compiler calls it twice).
+- **Module names are hoisted.** A `module` name refers to the module's field
+  anywhere in the file, including before its declaration (`module function
+  a() { b() }` then `module function b() {}`), like `M.b` in Lua. In the
+  reference compiler, a reference before the declaration is a global. Locals
+  still shadow module names, and `module.x` always means the module's `x`
+  (ex. `module function setup(opts) { module.opts = opts }`). `module.x` also
+  works w/o `module` declarations, and makes the file return the module.
 - **Lua keywords as names.** Midnight allows names like `end` that are keywords in
   Lua. midnight uses them as is; the reference compiler renames them (`end_`),
   which is only visible for globals.

@@ -135,3 +135,40 @@ func TestLintFatArrowComponent(t *testing.T) {
 		}
 	}
 }
+
+func TestLintSnakeCase(t *testing.T) {
+	on := Options{}
+	cases := []struct {
+		source string
+		want   []string
+	}{
+		// locals, local functions, parameters, loop variables
+		{"local pageFor = 1\nprint(pageFor)", []string{"1:snake-case"}},
+		{"local function splitLines(s) { return s }\nprint(splitLines(1))", []string{"1:snake-case"}},
+		{"local f = (lineStart) -> lineStart\nprint(f(1))", []string{"1:snake-case"}},
+		{"for _, rowCell in ipairs({}) { print(rowCell) }", []string{"1:snake-case"}},
+		{"local { fooBar } = {}\nprint(fooBar)", []string{"1:snake-case"}},
+		// module / global names, once each
+		{"module pageFor = 1\nmodule function f() { module.pageFor = 2 }", []string{"1:snake-case"}},
+		{"global hasToc = 1", []string{"1:snake-case"}},
+		// fine: snake_case, PascalCase, SCREAMING_CASE, leading _, fields
+		{"local page_for, Card, MAX_RESULTS, _x, t = 1, 2, 3, 4, {}\nt.fooBar = page_for + Card + MAX_RESULTS\nfunction t.doThing() {}\nfunction t:otherThing() {}", nil},
+		{"local class Lamp { turnOff() {} }\nprint(Lamp)", nil},
+	}
+	for _, c := range cases {
+		got := check(t, c.source, on)
+		if fmt.Sprint(got) != fmt.Sprint(c.want) {
+			t.Errorf("%s\n  got  %v\n  want %v", c.source, got, c.want)
+		}
+	}
+
+	// off w/ CamelCase
+	if got := check(t, "local pageFor = 1\nprint(pageFor)", Options{CamelCase: true}); got != nil {
+		t.Errorf("reported w/ CamelCase: %v", got)
+	}
+	for name, want := range map[string]string{"pageFor": "page_for", "forgetHTML": "forget_html", "isHTMLElement": "is_html_element"} {
+		if got := snakeCase(name); got != want {
+			t.Errorf("snakeCase(%q) = %q, want %q", name, got, want)
+		}
+	}
+}
