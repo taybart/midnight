@@ -1,0 +1,109 @@
+-- The same todos, client side: the server renders the page once (with the
+-- todos at the time), and custom elements (plain js, see elements.mn) do
+-- the rest in the browser, through the JSON api (todo/api.go). Nothing here
+-- is an action (no functions in on* attributes), so the server keeps no
+-- state for the page and sends no client script, only the elements' module.
+local { css, map } = require('midnight.markup')
+local { TodoList, ThemeToggle } = require('elements')
+local todos = require('app.todos') -- Go functions (see todo/page.go)
+local Header = require('header')
+
+local s = css({
+  body = {
+    height = 'auto',
+    min_height = '100vh',
+    font_family = 'system-ui, -apple-system, "Segoe UI", sans-serif',
+    line_height = '1.5',
+  },
+  app = { max_width = '36rem', margin = '0 auto', padding = '1.5rem 1rem 3rem' },
+  form = {
+    display = 'flex',
+    gap = '0.5rem',
+    margin_bottom = '0.75rem',
+    input = { flex = '1', font_size = '1rem', height = '2.4rem', padding = '0 0.25rem' },
+    button = { padding = '0 1.1rem', font_size = '0.95rem', cursor = 'pointer' },
+  },
+  error = { color = '#e5534b', font_size = '0.9rem', margin = '0 0 0.75rem' },
+  list = { padding = '0', margin = '0' },
+  empty = { opacity = '0.5', font_style = 'italic' },
+  item = {
+    display = 'flex',
+    align_items = 'center',
+    gap = '0.75rem',
+    ['input[type=checkbox]'] = {
+      accent_color = 'var(--good-color-light)',
+      width = '1.1rem',
+      height = '1.1rem',
+      margin = '0',
+      cursor = 'pointer',
+      flex_shrink = '0',
+    },
+    button = {
+      margin_left = 'auto',
+      padding = '0.15rem 0.6rem',
+      font_size = '0.8rem',
+      opacity = '0.35',
+      cursor = 'pointer',
+      transition = 'opacity 0.15s',
+    },
+    ['&:hover button, & button:focus-visible'] = { opacity = '1' },
+  },
+  title = { flex = '1', overflow_wrap = 'anywhere' },
+  done = { text_decoration = 'line-through', opacity = '0.45' },
+  footer = {
+    display = 'flex',
+    justify_content = 'space-between',
+    margin_top = '1rem',
+    font_size = '0.85rem',
+    opacity = '0.6',
+  },
+})
+
+-- One todo. The element clones the one in the <template> for todos added in
+-- the browser, so both look the same. data-* are what the element reads.
+local Item = (props) -> <li class={s.item} data-id={props.todo.id}>
+  <input type="checkbox" checked={props.todo.done}/>
+  <span class={{ s.title, [s.done] = props.todo.done }} data-title>{props.todo.title}</span>
+  <button data-remove>remove</button>
+</li>
+
+return (props) -> {
+  local list = todos.list()
+  local left = 0
+  for _, t in ipairs(list) { if !t.done { left += 1 } }
+  return <html>
+    <head>
+      <meta charset="utf-8"/>
+      <meta name="viewport" content="width=device-width, initial-scale=1"/>
+      <title>todos (custom elements)</title>
+      <link rel="stylesheet" href="tb.css"/>
+      {--[[ custom elements are inline by default ]]}
+      <style>theme-toggle, todo-list { display: block; }</style>
+    </head>
+    <body class={s.body} data-theme="dark">
+      <div class={s.app}>
+        {--[[ the header's button, without an on_toggle, is plain: the element
+          wires it up ]]}
+        <ThemeToggle><Header router="{props.router} + custom elements" theme="dark"/></ThemeToggle>
+        {--[[ class names are scoped (hashed), so the element gets the one it
+          toggles as an attribute ]]}
+        <TodoList api="api/todos" done-class={s.done}>
+          <form class={s.form}>
+            <input type="text" name="title" placeholder="what needs doing?" autocomplete="off"/>
+            <button>add</button>
+          </form>
+          <p class={s.error} data-error hidden></p>
+          <ul class={s.list}>
+            <li class={s.empty} data-empty hidden={#list > 0}>nothing to do</li>
+            {map(list, (t) -> <Item key={t.id} todo={t}/>)}
+          </ul>
+          <template><Item todo={{ id = 0, title = '', done = false }}/></template>
+          <footer class={s.footer}>
+            <span><span data-left>{left}</span> left</span>
+            <span><span data-done>{#list - left}</span> done</span>
+          </footer>
+        </TodoList>
+      </div>
+    </body>
+  </html>
+}

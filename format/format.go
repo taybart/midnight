@@ -271,7 +271,7 @@ func isTableBrace(tokens []*token, i int) bool {
 	case prev.Kind == parse.RawSymbol:
 		return true
 	case prev.Kind == parse.RawWord:
-		return expressionKeywords[prev.Text] || is(prev, "local", "global", "module", "for")
+		return expressionKeywords[prev.Text] || is(prev, "local", "global", "module", "const", "for")
 	}
 	return false
 }
@@ -552,6 +552,9 @@ func spaceBetween(a, b, beforeA *token) bool {
 		}
 		return !isValue(a) && !is(a, "function")
 	case is(b, "["):
+		if is(a, "const") {
+			return b.spaced // `const[i]` index vs `const [a] = t` declaration
+		}
 		return !isValue(a)
 	}
 	return true

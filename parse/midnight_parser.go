@@ -75,6 +75,8 @@ type midnightParser struct {
 
 	blockDepth int
 	scopes     []map[string]string
+	// The names in each scope declared w/ `const`, and their lines.
+	consts     []map[string]int
 	tmpCounter int
 
 	// Innermost loop, or nil outside of loops (reset at function boundaries).
@@ -111,13 +113,19 @@ type midnightParser struct {
 	hasModuleDecls      bool
 	// Names declared w/ `module` at the top level, in declaration order.
 	moduleNames []string
+	// Of those, the ones declared w/ `module const`, and their lines.
+	moduleConsts map[string]int
 }
 
 // Result of parsing an index chain (ex. `a.b[c]:d()`).
 type midnightChain struct {
-	expr       ast.Expr
-	chainLen   int
-	isCall     bool
+	expr     ast.Expr
+	chainLen int
+	isCall   bool
+	// The name being assigned to when the chain is a name (`x`) or a module
+	// field (`module.x`), else "" (see checkAssignable).
+	name       string
+	isModule   bool
 	finalBase  ast.Expr // `a.b` in `a.b[c]`
 	finalIndex ast.Expr // `c` in `a.b[c]`
 }
@@ -151,22 +159,30 @@ func ParseMidnightWithOptions(reader io.Reader, name string, opts MidnightOption
 	// Module names are hoisted: they're visible in the whole file, not just
 	// after their declaration (they're fields of the module table, so they're
 	// looked up when used, same as `M.x` in Lua). A first pass collects them.
-	var hoisted []string
+	// (and so is whether they're const)
+	var pre *midnightParser
 	if midnightHasModuleKeyword(tokens) {
-		pre := newMidnightParser(name, tokens, opts, nil)
+		pre = newMidnightParser(name, tokens, opts, nil)
 		if _, err := pre.run(); err != nil {
 			return nil, err
 		}
-		hoisted = pre.moduleNames
 	}
 
-	return newMidnightParser(name, tokens, opts, hoisted).run()
+	return newMidnightParser(name, tokens, opts, pre).run()
 }
 
-func newMidnightParser(name string, tokens []midnightToken, opts MidnightOptions, moduleNames []string) *midnightParser {
+// newMidnightParser returns a parser for tokens. pre is the first pass, which
+// collected the module names (or nil, when there's no first pass).
+func newMidnightParser(name string, tokens []midnightToken, opts MidnightOptions, pre *midnightParser) *midnightParser {
 	root := map[string]string{}
-	for _, n := range moduleNames {
-		root[n] = midnightScopeModule
+	rootConsts := map[string]int{}
+	if pre != nil {
+		for _, n := range pre.moduleNames {
+			root[n] = midnightScopeModule
+		}
+		for n, line := range pre.moduleConsts {
+			rootConsts[n] = line
+		}
 	}
 	return &midnightParser{
 		source:              name,
@@ -174,6 +190,7 @@ func newMidnightParser(name string, tokens []midnightToken, opts MidnightOptions
 		cur:                 tokens[0],
 		blockDepth:          1,
 		scopes:              []map[string]string{root},
+		consts:              []map[string]int{rootConsts},
 		isVarargs:           true,
 		isModuleReturnBlock: true,
 		opts:                opts,
@@ -326,15 +343,69 @@ func (p *midnightParser) newTmpName() string {
 
 /* Scopes {{{ */
 
-func (p *midnightParser) pushScope() { p.scopes = append(p.scopes, map[string]string{}) }
+func (p *midnightParser) pushScope() {
+	p.scopes = append(p.scopes, map[string]string{})
+	p.consts = append(p.consts, map[string]int{})
+}
 
-func (p *midnightParser) popScope() { p.scopes = p.scopes[:len(p.scopes)-1] }
+func (p *midnightParser) popScope() {
+	p.scopes = p.scopes[:len(p.scopes)-1]
+	p.consts = p.consts[:len(p.consts)-1]
+}
 
+// declare declares name in the current scope. (A name declared again, ex.
+// `local x` after `const x`, is a new variable, so it isn't const.)
 func (p *midnightParser) declare(name, scope string) {
 	if scope == midnightScopeModule && len(p.scopes) == 1 {
 		p.moduleNames = append(p.moduleNames, name)
 	}
 	p.scopes[len(p.scopes)-1][name] = scope
+	delete(p.consts[len(p.consts)-1], name)
+}
+
+// declareConst marks name, just declared in the current scope, as const.
+func (p *midnightParser) declareConst(name, scope string, line int) {
+	p.consts[len(p.consts)-1][name] = line
+	if scope == midnightScopeModule && len(p.scopes) == 1 {
+		if p.moduleConsts == nil {
+			p.moduleConsts = map[string]int{}
+		}
+		p.moduleConsts[name] = line
+	}
+}
+
+// constLine returns the line name was declared on, if the name in scope is
+// const, else 0. (Only names in scope: a global can't be const.)
+func (p *midnightParser) constLine(name string) int {
+	for i := len(p.scopes) - 1; i >= 0; i-- {
+		if _, ok := p.scopes[i][name]; ok {
+			return p.consts[i][name]
+		}
+	}
+	return 0
+}
+
+// moduleConstLine returns the line of `module const name`, else 0.
+func (p *midnightParser) moduleConstLine(name string) int {
+	if p.scopes[0][name] != midnightScopeModule {
+		return 0
+	}
+	return p.consts[0][name]
+}
+
+// checkAssignable throws if name (in scope, or `module.name` when isModule)
+// is const.
+func (p *midnightParser) checkAssignable(name string, isModule bool, line int) {
+	if name == "" {
+		return
+	}
+	declared := p.constLine(name)
+	if isModule {
+		declared = p.moduleConstLine(name)
+	}
+	if declared != 0 {
+		p.throw(line, "cannot assign to const '%s' (declared on line %d)", name, declared)
+	}
 }
 
 func (p *midnightParser) lookup(name string) string {
@@ -419,6 +490,22 @@ func midnightLibCall(lib, method string, args []ast.Expr, line int) *ast.FuncCal
 	call := midnightCall(midnightAttr(midnightIdent(lib, line), midnightString(method, line), line), args, line)
 	call.AdjustRet = true
 	return call
+}
+
+// midnightFrozen wraps a table constructor (`const t = { ... }`) in
+// `table.freeze(...)`, and the constructors that are its values, so a const
+// table literal is read-only all the way down. Anything else is returned as
+// is: only a table made right there is safe to freeze (`const m = require(...)`
+// would freeze a table other code has too).
+func midnightFrozen(expr ast.Expr) ast.Expr {
+	table, ok := expr.(*ast.TableExpr)
+	if !ok {
+		return expr
+	}
+	for _, field := range table.Fields {
+		field.Value = midnightFrozen(field.Value)
+	}
+	return midnightLibCall("table", "freeze", []ast.Expr{table}, table.Line())
 }
 
 func midnightAssign(lhs, rhs ast.Expr, line int) *ast.AssignStmt {
@@ -916,6 +1003,9 @@ func (p *midnightParser) functionDeclaration(scope string) ast.Stmt {
 		p.declare(baseName, scope)
 		signature = p.target(baseName, scope, line)
 	} else {
+		if !p.is(".") && !p.is(":") {
+			p.checkAssignable(baseName, false, line) // (`function x()` assigns x)
+		}
 		signature = p.resolve(baseName, line)
 	}
 
@@ -1367,7 +1457,22 @@ func (p *midnightParser) assignmentChain() *midnightChain {
 	}
 
 	line := p.cur.Line
-	return p.indexChain(p.nameExpr(line))
+	isModule := p.isModuleAccess()
+	name := ""
+	if !isModule && p.cur.Type == midnightWord {
+		name = p.cur.Value
+	}
+	chain := p.indexChain(p.nameExpr(line))
+	switch {
+	case chain.isCall:
+	case !isModule && chain.chainLen == 0:
+		chain.name = name
+	case isModule && chain.chainLen == 1:
+		if key, ok := chain.finalIndex.(*ast.StringExpr); ok {
+			chain.name, chain.isModule = key.Value, true
+		}
+	}
+	return chain
 }
 
 var midnightAssignmentOperators = map[string]bool{
@@ -1404,6 +1509,7 @@ func (p *midnightParser) operatorAssignment(id *midnightChain, value ast.Expr, o
 
 func (p *midnightParser) variableAssignment(first *midnightChain, line int) []ast.Stmt {
 	ids := []*midnightChain{first}
+	p.checkAssignable(first.name, first.isModule, line)
 
 	for p.branch(",") {
 		idLine := p.cur.Line
@@ -1411,6 +1517,7 @@ func (p *midnightParser) variableAssignment(first *midnightChain, line int) []as
 		if id.isCall {
 			p.throw(idLine, "cannot assign value to function call")
 		}
+		p.checkAssignable(id.name, id.isModule, idLine)
 		ids = append(ids, id)
 	}
 
@@ -1463,9 +1570,12 @@ func (p *midnightParser) variableAssignment(first *midnightChain, line int) []as
 
 /* Declarations {{{ */
 
-func (p *midnightParser) variableDeclaration(scope string, line int) []ast.Stmt {
+// variableDeclaration parses the names and values of a declaration, after its
+// scope (and `const`, when isConst).
+func (p *midnightParser) variableDeclaration(scope string, line int, isConst bool) []ast.Stmt {
 	names := []string{}
 	destructures := []*midnightDestructure{}
+	declared := []string{}
 
 	p.list(func() {
 		name, destructure := p.variable(scope)
@@ -1474,12 +1584,23 @@ func (p *midnightParser) variableDeclaration(scope string, line int) []ast.Stmt 
 			names = append(names, destructure.tmpName)
 			for _, n := range destructure.names {
 				p.declare(n, scope)
+				declared = append(declared, n)
 			}
 		} else {
 			names = append(names, name)
 			p.declare(name, scope)
+			declared = append(declared, name)
 		}
 	})
+
+	if isConst {
+		if !p.is("=") {
+			p.throw(line, "const '%s' needs a value (ex. const %s = ...)", declared[0], declared[0])
+		}
+		for _, n := range declared {
+			p.declareConst(n, scope, line)
+		}
+	}
 
 	if len(destructures) > 0 {
 		p.expect("=")
@@ -1490,6 +1611,11 @@ func (p *midnightParser) variableDeclaration(scope string, line int) []ast.Stmt 
 	}
 
 	exprs := p.expressionList()
+	if isConst && len(destructures) == 0 {
+		for i, expr := range exprs {
+			exprs[i] = midnightFrozen(expr)
+		}
+	}
 	stmts := append([]ast.Stmt{}, p.hoistCond(exprs, line)...)
 
 	if len(destructures) > 0 {
@@ -1598,9 +1724,18 @@ func (p *midnightParser) statement() []ast.Stmt {
 			stmts = []ast.Stmt{p.functionDeclaration(scope)}
 		} else if p.isClassDeclaration() {
 			stmts = p.classDeclaration(scope)
+		} else if p.isConstDeclaration() {
+			if scope != midnightScopeModule {
+				p.throw(line, "cannot use '%s const': use 'const' (or 'module const')", scope)
+			}
+			p.consume()
+			stmts = p.variableDeclaration(scope, line, true)
 		} else {
-			stmts = p.variableDeclaration(scope, line)
+			stmts = p.variableDeclaration(scope, line, false)
 		}
+	case p.isConstDeclaration():
+		p.consume()
+		stmts = p.variableDeclaration(midnightScopeLocal, line, true)
 	default:
 		chain := p.assignmentChain()
 		if chain.isCall && p.isCatch() {

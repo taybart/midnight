@@ -1,0 +1,40 @@
+-- One todo: a checkbox, its title, and a remove button.
+local { css } = require('midnight.markup')
+local todos = require('app.todos') -- Go functions (see todo/page.go)
+
+local s = css({
+  item = {
+    display = 'flex',
+    align_items = 'center',
+    gap = '0.75rem',
+    ['input[type=checkbox]'] = {
+      accent_color = 'var(--good-color-light)',
+      width = '1.1rem',
+      height = '1.1rem',
+      margin = '0',
+      cursor = 'pointer',
+      flex_shrink = '0',
+    },
+    button = {
+      margin_left = 'auto',
+      padding = '0.15rem 0.6rem',
+      font_size = '0.8rem',
+      opacity = '0.35',
+      cursor = 'pointer',
+      transition = 'opacity 0.15s',
+    },
+    ['&:hover button, & button:focus-visible'] = { opacity = '1' },
+  },
+  title = { flex = '1', overflow_wrap = 'anywhere' },
+  done = { text_decoration = 'line-through', opacity = '0.45' },
+})
+
+return (props) -> <li class={s.item}>
+  <input 
+    type="checkbox" 
+    checked={props.todo.done} 
+    onchange={() -> { todos.toggle(props.todo.id) }}
+  />
+  <span class={{ s.title, [s.done] = props.todo.done }}>{props.todo.title}</span>
+  <button onclick={() -> { todos.remove(props.todo.id) }}>remove</button>
+</li>

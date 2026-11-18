@@ -44,6 +44,9 @@ func TestHighlightCode(t *testing.T) {
 			`[keyword:local] [keyword:class] A [punct::] B [punct:{] [keyword:static] [function:of][punct:(][punct:)] [punct:{][punct:}] [punct:}]`},
 		{"midnight", "local class = 1\nclass\nfoo()",
 			"[keyword:local] class [operator:=] [number:1]\nclass\n[function:foo][punct:(][punct:)]"},
+		{"midnight", "const x = 1", `[keyword:const] x [operator:=] [number:1]`},
+		{"midnight", "module const { a } = t", `[keyword:module] [keyword:const] [punct:{] a [punct:}] [operator:=] t`},
+		{"midnight", "const = 1", `const [operator:=] [number:1]`},
 		// lua
 		{"lua", `local function f(a) return a ~= nil and #a end -- c`,
 			`[keyword:local] [keyword:function] [function:f][punct:(]a[punct:)] [keyword:return] a [operator:~=] [const:nil] [keyword:and] [operator:#]a [keyword:end] [comment:-- c]`},

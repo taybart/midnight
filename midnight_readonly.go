@@ -36,3 +36,18 @@ func (tb *LTable) checkWritable() {
 		panic(errReadOnlyTable)
 	}
 }
+
+// table.freeze(t) makes t read-only (not the tables in it) and returns it.
+// (luagen output defines it for other Lua runtimes, see luagen's freezePolyfill.)
+func tableFreeze(L *LState) int {
+	tb := L.CheckTable(1)
+	tb.Freeze()
+	L.Push(tb)
+	return 1
+}
+
+// table.isfrozen(t) returns whether t is read-only.
+func tableIsFrozen(L *LState) int {
+	L.Push(LBool(L.CheckTable(1).readOnly))
+	return 1
+}

@@ -50,7 +50,8 @@ integrations and CI).
 ## Language additions
 
 Besides Erde's syntax, Midnight has `match` statements, `if` / `match`
-expressions, `catch`, interpolation formats, markup elements, and classes.
+expressions, `catch`, `const`, interpolation formats, markup elements, and
+classes.
 Scripts that use them only run on midnight (or as `midnight -c` output).
 
 ### `match`
@@ -194,6 +195,42 @@ local data = tmp
   `catch` followed by `=`, `,`, `.`, `[`, `:`, `(`, or an assignment operator
   is still a name.
 
+### `const`
+
+`const` declares a local that can't be assigned again. It's checked when
+compiling, and compiles to a plain `local`. A table literal is also frozen:
+
+```midnight
+const site_source = 'https://github.com/taybart/midnight-lang.rest'
+const { render, json } = require('midnight.markup')   -- destructures too
+module const VERSION = '1.2.0'                        -- an export
+
+site_source = 'x'   -- error: cannot assign to const 'site_source' (declared on line 1)
+
+const cfg = { port = 8080, db = { host = 'localhost' } }
+cfg.db.host = 'x'   -- error (at runtime): attempt to modify a read-only table
+```
+
+- Any assignment to the name is an error: `x = ...`, `x += ...`, a bare
+  `function x()` or `class X`, from a closure, and (for `module const`)
+  `module.x = ...`.
+- A table literal (and the literals in it) is frozen w/ `table.freeze`.
+  Other values aren't: `const t = make()` only makes the name const, since
+  `t` might be a table other code has (ex. `const m = require('m')`). Use
+  `local` for a table you'll fill in (`local M = {}`).
+- `table.freeze(t)` makes `t` read-only (not the tables in it) and returns
+  it, and `table.isfrozen(t)` checks. Writes, `rawset`, `table.insert` /
+  `remove` / `sort`, and `setmetatable` on it are errors. (Like Luau's.)
+- A new `local x` (a parameter, a loop variable, ...) is a new variable, so
+  it can be assigned.
+- `const` needs a value (`const x` alone is an error), and there's no
+  `local const` / `global const`.
+- `module const x` only protects the name inside the file: another file
+  can still write `require('m').x = ...`, since exports are fields of a table.
+- `const` is a contextual keyword: it only declares when a name or a
+  destructure follows on the same line, so `const = 1` and `const(x)` still
+  use a variable named const (as does `const[1] = 2` when one is in scope).
+
 ### Interpolation formats
 
 `{expr:%spec}` formats an interpolated value w/ `string.format`:
@@ -236,7 +273,8 @@ print(require('midnight.markup').render(<Card title="hi"><p>hello {name}</p></Ca
 Elements are lowered to `h(tag, props, ...children)` calls (`h` is imported
 automatically if it isn't in scope, or `-markup-factory name` uses another function), so
 the compiled output runs on any lua w/ the runtime. See
-[docs/MARKUP.md](docs/MARKUP.md).
+[docs/MARKUP.md](docs/MARKUP.md), and [docs/PAGES.md](docs/PAGES.md) for serving
+interactive pages from Go (`github.com/taybart/midnight/pages`).
 
 ### `class`
 
@@ -414,6 +452,12 @@ differences:
 - `continue` and `goto` compile to `goto`, which needs Lua 5.2+ or LuaJIT.
 - Bit operators compile to `bit32` calls, which need a `bit32` library (builtin
   in Lua 5.2, otherwise use a polyfill).
+- `table.freeze` / `table.isfrozen` (ex. from a `const` table) are defined by
+  a polyfill at the top of the output when the runtime doesn't have them. It
+  can't do everything midnight's runtime does: on Lua 5.1 / LuaJIT, `pairs`
+  and `#` see a frozen table as empty, `rawset` (and `table.insert` /
+  `remove` before Lua 5.3) aren't stopped, and a table w/ a metatable can't
+  be frozen.
 
 Statements are kept on their original lines, so errors in the generated Lua
 report the Midnight line numbers. Comments are not preserved.

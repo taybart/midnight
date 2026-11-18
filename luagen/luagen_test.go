@@ -64,3 +64,26 @@ func TestTableFormatting(t *testing.T) {
 		t.Errorf("closing brace not on its own line:\n%s", got)
 	}
 }
+
+func TestFreezePolyfill(t *testing.T) {
+	for src, want := range map[string]bool{
+		"local t = table.freeze({})":           true,
+		"print(table.isfrozen(t))":             true,
+		"local table = {}; table.freeze = 1":   false, // (a local named table)
+		"local t = { freeze = 1 }; t.freeze()": false,
+	} {
+		chunk, err := parse.Parse(strings.NewReader(src), "<string>")
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := strings.HasPrefix(Generate(chunk), "if not table.freeze then ")
+		if got != want {
+			t.Errorf("%s: polyfill %v, want %v", src, got, want)
+		}
+	}
+	// it's on the first line, so line numbers still match
+	chunk, _ := parse.Parse(strings.NewReader("local t = table.freeze({})\nlocal u = 1"), "<string>")
+	if lines := strings.Split(Generate(chunk), "\n"); !strings.HasSuffix(lines[0], "local t = table.freeze({})") || lines[1] != "local u = 1" {
+		t.Errorf("lines moved:\n%s", strings.Join(lines, "\n"))
+	}
+}

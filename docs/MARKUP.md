@@ -2,8 +2,9 @@
 
 Midnight has JSX style elements for writing HTML, and a small
 runtime (`midnight.markup`) that renders it to HTML: components, scoped styles, and
-(w/ a host that keeps state between requests, like
-[rest](https://github.com/taybart/rest)'s `page` handlers) interactive pages.
+(w/ a host that keeps state between requests, like the [`pages`](PAGES.md)
+package or [rest](https://github.com/taybart/rest)'s `page` handlers)
+interactive pages.
 
 ```midnight
 local { css, state } = require('midnight.markup')
@@ -259,8 +260,8 @@ W/o `rpc`, actions POST to the page's own url (`location.pathname +
 location.search`, as the browser sees it), so the host can handle them w/
 the same route as the page, even behind a proxy that rewrites paths.
 
-The host has to run the page and its actions in the same lua state (rest's
-`page` handlers do all of this, see rest's docs). From there:
+The host has to run the page and its actions in the same lua state (the
+[`pages`](PAGES.md) package does all of this). From there:
 
 - **Events**: an action gets a summary of the browser event: `{ type, value,
   checked, key, form }` (`value` of inputs, `checked` of checkboxes / radios,

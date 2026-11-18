@@ -29,6 +29,25 @@ var MarkupLibSource string
 //go:embed lib/idiomorph.lua
 var MarkupMorphLibSource string
 
+// MarkupMorphJS returns the vendored idiomorph script (what
+// `require('midnight.markup.idiomorph')` returns), which defines
+// window.Idiomorph. For tools that morph pages outside the markup client (ex.
+// a dev server's reloads).
+var MarkupMorphJS = sync.OnceValue(func() string {
+	_, js, _ := strings.Cut(MarkupMorphLibSource, "return [=[")
+	js, _, _ = strings.Cut(js, "]=]")
+	return js
+})
+
+// MarkupMountedJS is a js expression that's true on a page the markup client
+// is mounted on (one w/ actions). Its lua state lives on the server for that
+// page load, so a tool that re-renders the page (ex. a dev server's reloads)
+// should reload it instead of re-fetching and morphing it.
+//
+// (window.midnight alone can be an element with id="midnight", browsers put
+// those on window)
+const MarkupMountedJS = `typeof window.midnight?.rpc === 'function'`
+
 // An embedded lua module. It's compiled once, and its (immutable) bytecode is
 // shared by every state that requires it.
 type embeddedLib struct {

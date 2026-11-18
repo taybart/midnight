@@ -1,0 +1,51 @@
+-- The todo list: a form to add one (with its error), the todos, and counts.
+local { state, map, css } = require('midnight.markup')
+local todos = require('app.todos') -- Go functions (see todo/page.go)
+local Item = require('item')
+
+local s = css({
+  form = {
+    display = 'flex',
+    gap = '0.5rem',
+    margin_bottom = '0.75rem',
+    input = { flex = '1', font_size = '1rem', height = '2.4rem', padding = '0 0.25rem' },
+    button = { padding = '0 1.1rem', font_size = '0.95rem', cursor = 'pointer' },
+  },
+  error = { color = '#e5534b', font_size = '0.9rem', margin = '0 0 0.75rem' },
+  list = { padding = '0', margin = '0' },
+  empty = { opacity = '0.5', font_style = 'italic' },
+  footer = {
+    display = 'flex',
+    justify_content = 'space-between',
+    margin_top = '1rem',
+    font_size = '0.85rem',
+    opacity = '0.6',
+  },
+})
+
+return () -> {
+  local st = state({ error = nil })
+  local add = (e) -> {
+    local ok, err = pcall(todos.add, e.form.title)
+    -- Go errors are lua errors: "<where>: app.todos.add: <message>"
+    st.error = if ok { nil } else { err:match('app%.todos%.add: (.*)') }
+  }
+  local list = todos.list()
+  local left = 0
+  for _, t in ipairs(list) { if !t.done { left += 1 } }
+  return <main>
+    <form class={s.form} onsubmit={add}>
+      <input type="text" name="title" placeholder="what needs doing?" autocomplete="off"/>
+      <button>add</button>
+    </form>
+    {st.error && <p class={s.error}>{st.error}</p>}
+    <ul class={s.list}>
+      {#list == 0 && <li class={s.empty}>nothing to do</li>}
+      {map(list, (t) -> <Item key={t.id} todo={t}/>)}
+    </ul>
+    <footer class={s.footer}>
+      <span>{left} left</span>
+      <span>{#list - left} done</span>
+    </footer>
+  </main>
+}

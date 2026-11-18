@@ -18,6 +18,9 @@ var tableFuncs = map[string]LGFunction{
 	"maxn":   tableMaxN,
 	"remove": tableRemove,
 	"sort":   tableSort,
+	// midnight: read-only tables (see midnight_readonly.go)
+	"freeze":   tableFreeze,
+	"isfrozen": tableIsFrozen,
 }
 
 func tableSort(L *LState) int {

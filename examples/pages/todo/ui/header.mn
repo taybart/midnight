@@ -1,0 +1,31 @@
+-- The page header: title, which router served it, and the theme toggle.
+-- props: router, theme ('dark' | 'light'), on_toggle (switches the theme)
+local { css } = require('midnight.markup')
+
+local s = css({
+  header = {
+    margin = '0 0 1.5rem',
+    max_height = 'none',
+    padding_bottom = '0.75rem',
+    h1 = { margin = '0', font_size = '1.75rem', font_weight = '600', letter_spacing = '-0.02em' },
+  },
+  sub = { opacity = '0.55', font_size = '0.8rem' },
+  toggle = {
+    border = 'none',
+    font_size = '1.1rem',
+    line_height = '1',
+    padding = '0.4rem 0.5rem',
+    border_radius = '0.4rem',
+    cursor = 'pointer',
+  },
+})
+
+return (props) -> <header class={s.header}>
+  <div>
+    <h1>todos</h1>
+    <span class={s.sub}>served with {props.router}</span>
+  </div>
+  <button class={s.toggle} title="toggle theme" onclick={props.on_toggle}>
+    {if props.theme == 'dark' { '☀' } else { '☾' }}
+  </button>
+</header>

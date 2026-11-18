@@ -1,0 +1,41 @@
+-- The page: the <html> shell, and the body's layout and theme. The parts are
+-- next to it (require finds them: file pages look in their own directory),
+-- each with its own styles.
+--
+-- tb.css (served next to the page) is the base: theme colors, buttons,
+-- inputs, lists. The `css` in each file is that part's own (scoped) styles.
+local { css } = require('midnight.markup')
+local Header = require('header')
+local List = require('list')
+
+local s = css({
+  body = {
+    height = 'auto',
+    min_height = '100vh',
+    font_family = 'system-ui, -apple-system, "Segoe UI", sans-serif',
+    line_height = '1.5',
+  },
+  app = { max_width = '36rem', margin = '0 auto', padding = '1.5rem 1rem 3rem' },
+})
+
+-- the theme is page state (tb.css themes by data-theme), so it's on <body>
+-- in a component: the page's root element itself doesn't re-render
+local theme = 'dark'
+local toggle = () -> { theme = if theme == 'dark' { 'light' } else { 'dark' } }
+
+local Body = (props) -> <body class={s.body} data-theme={theme}>
+  <div class={s.app}>
+    <Header router={props.router} theme={theme} on_toggle={toggle}/>
+    <List/>
+  </div>
+</body>
+
+return (props) -> <html>
+  <head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>todos</title>
+    <link rel="stylesheet" href="tb.css"/>
+  </head>
+  <Body router={props.router}/>
+</html>

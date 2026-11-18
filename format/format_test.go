@@ -52,6 +52,7 @@ func TestFormatStyle(t *testing.T) {
 		{"local t = {a=1,b={}}", "local t = { a = 1, b = {} }"},
 		{"local f = (a,...rest)->a\nlocal g = x=>x", "local f = (a, ...rest) -> a\nlocal g = x => x"},
 		{"s:upper()\nlocal { a: b } = t", "s:upper()\nlocal { a: b } = t"},
+		{"const { a, b: c } = t\nmodule const [x] = l", "const { a, b: c } = t\nmodule const [x] = l"},
 		{"if (x) { return (1, 2) }", "if (x) { return (1, 2) }"},
 		{"goto done\n::done::", "goto done\n::done::"},
 		{"print(x)--note\n--[[ block ]]", "print(x) -- note\n--[[ block ]]"},

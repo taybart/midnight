@@ -1,0 +1,256 @@
+/* tb.css (github.com/taybart/tb.css bundle.css), vendored for the example */
+
+/* ===== From: styles/theme.css ===== */
+:root {
+  --bg-dark-color: #1e2227;
+  --bg-dark-light-color: #2a2f35;
+  --fg-dark-color: #ffffff;
+  --x-margin: 1em;
+  --header-height: 3em;
+  --footer-height: 2em;
+
+  --good-color: rgb(13, 171, 0);
+  --good-color-light: rgb(25 213 8);
+  --bad-color: rgb(212, 0, 0);
+
+  /* prevent flashbangs before theme is loaded */
+  --bg-color: #1e2227;
+  --fg-color: #ffffff;
+}
+
+[data-theme='light'] {
+  --bg-color: #ffffff;
+  --bg-light-color: #bebebe;
+  --fg-color: #1e2227;
+}
+[data-theme='dark'] {
+  --bg-color: #1e2227;
+  --bg-light-color: #2a2f35;
+  --fg-color: #ffffff;
+  --good-color: rgb(45, 100, 44);
+  --bad-color: rgb(118, 32, 32);
+}
+
+
+/* ===== From: styles/builtins.css ===== */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+::-webkit-scrollbar {
+  -webkit-appearance: none;
+  width: 0;
+  height: 0;
+}
+
+select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-color: transparent;
+  border: none;
+  padding: 0 1em 0 0;
+  margin: 0;
+  width: 100%;
+  font-family: inherit;
+  font-size: inherit;
+  cursor: inherit;
+  line-height: inherit;
+  outline: none;
+}
+.select {
+  min-width: 15em;
+  max-width: 22em;
+  border-top: 1px solid var(--fg-color);
+  border-radius: 0px;
+  padding: 0.25em 0.5em;
+  cursor: pointer;
+  line-height: 1.1;
+  color: var(--fg-color);
+  background-color: var(--bg-color);
+  display: grid;
+  grid-template-areas: "select";
+  align-items: center;
+  &::after {
+    width: 0.8em;
+    height: 0.5em;
+    pointer-events: none;
+    content: "▼";
+    justify-self: end;
+  }
+  select & {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+  }
+  select,
+  &:after {
+    color: var(--fg-color);
+    background-color: var(--bg-color);
+    grid-area: select;
+  }
+}
+
+label:has(input[type="text"]) {
+  display: flex;
+  width: 100%;
+  max-width: 25em;
+
+  & input[type="text"] {
+    align-self: flex-end;
+    width: 60%;
+    margin-left: auto;
+  }
+}
+
+input[type="text"],
+input[type="password"] {
+  height: 2em;
+
+  &,
+  textarea {
+    background-color: var(--bg-color);
+    color: var(--fg-color);
+    border: none;
+    border-bottom: 1px solid var(--fg-color);
+    border-radius: 0px;
+  }
+  &:focus {
+    outline: none;
+  }
+}
+textarea {
+  background-color: var(--bg-color);
+  color: var(--fg-color);
+  border: none;
+  border-bottom: 1px solid var(--fg-color);
+  &:focus {
+    outline: none;
+  }
+}
+
+button {
+  color: var(--fg-color);
+  background-color: var(--bg-color);
+  border: 1px solid var(--fg-color);
+  padding: 0.5em;
+  &:hover {
+    background-color: var(--fg-color);
+    color: var(--bg-color);
+  }
+}
+
+ul {
+  list-style: none;
+
+  & > li {
+    border-bottom: 1px solid var(--fg-color);
+    padding: 0.5em 0;
+  }
+}
+
+a {
+  color: var(--fg-color);
+}
+
+.button {
+  display: inline-block;
+  padding: 10px;
+  background: var(--bg-color);
+  color: var(--fg-color);
+  border: 1px solid var(--bg-color);
+  cursor: pointer;
+  &:hover {
+    border: 1px solid var(--fg-color);
+  }
+}
+
+progress {
+  border-radius: 7px;
+  height: 15px;
+  background-color: var(--bg-color);
+}
+progress::-webkit-progress-bar {
+  background-color: var(--bg-color);
+  border: 1px solid var(--fg-color);
+  border-radius: 7px;
+}
+progress::-webkit-progress-value {
+  border-radius: 5px;
+  background-color: var(--fg-color);
+}
+progress::-moz-progress-bar {
+  background-color: var(--fg-color);
+}
+
+
+/* ===== From: styles/index.css ===== */
+
+
+
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  font-family: sans-serif;
+  background-color: var(--bg-color);
+  color: var(--fg-color);
+}
+
+@media (prefer-color-scheme: dark) {
+  background-color: var(--dark-bg-color);
+  color: var(--dark-fg-color);
+}
+
+header {
+  margin: 0px var(--x-margin);
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  max-height: var(--header-height);
+  border-bottom: 1px solid var(--fg-color);
+  margin-bottom: 1em;
+}
+
+.content {
+  --height: calc(100vh - var(--header-height) - var(--footer-height) + 0.8em);
+  min-height: var(--height);
+  max-height: var(--height);
+  overflow-y: auto;
+  height: 100%;
+  margin: 0 var(--x-margin);
+  margin-bottom: calc(-1 * var(--footer-height));
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+}
+
+.checkmark:after {
+  content: "\2713";
+  display: inline-block;
+}
+.x-fail:after {
+  content: "\2716";
+  display: inline-block;
+}
+
+.good {
+  color: var(--good-color);
+}
+.bad {
+  color: var(--bad-color);
+}
+
+.hidden {
+  opacity: 0%;
+}
+.gone {
+  display: none !important;
+}
+

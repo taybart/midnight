@@ -1741,7 +1741,7 @@ func (ls *LState) RaiseError(format string, args ...interface{}) {
 // This function is equivalent to lua_error( http://www.lua.org/manual/5.1/manual.html#lua_error ).
 func (ls *LState) Error(lv LValue, level int) {
 	if str, ok := lv.(LString); ok {
-		ls.raiseError(level, string(str))
+		ls.raiseError(level, "%s", string(str))
 	} else {
 		if !ls.hasErrorFunc {
 			ls.closeAllUpvalues()

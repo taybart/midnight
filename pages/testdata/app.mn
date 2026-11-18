@@ -1,0 +1,8 @@
+local Counter = require('counter')
+
+return (props) -> <html>
+  <body>
+    <h1>hello {props.name}</h1>
+    <Counter/>
+  </body>
+</html>

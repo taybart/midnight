@@ -1,0 +1,6 @@
+local { state } = require('midnight.markup')
+
+return () -> {
+  local s = state({ count = 0 })
+  return <button onclick={() -> { s.count += 1 }}>count {s.count}</button>
+}

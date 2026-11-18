@@ -32,6 +32,23 @@ import "github.com/taybart/midnight/ast"
 // keyword: it is only a declaration when followed by a name on the same line
 // (ex. `class Foo {`), so `class = 'x'`, `local class`, and markup `class`
 // attributes are unaffected.
+// isConstDeclaration checks for `const` starting a declaration: `const x`,
+// `const { a } = t`, or `const [a] = t`. (const is a name everywhere else, ex.
+// `const = 1`, or `const[1] = 2` when a variable named const is in scope.)
+func (p *midnightParser) isConstDeclaration() bool {
+	if p.cur.Type != midnightWord || !p.is("const") {
+		return false
+	}
+	next := p.tokens[p.index+1]
+	if next.Line != p.cur.Line {
+		return false
+	}
+	if next.Type == midnightWord {
+		return !midnightKeywords[next.Value] && !midnightTerminals[next.Value]
+	}
+	return (isMidnightSyntax(next, "{") || isMidnightSyntax(next, "[")) && p.lookup("const") == ""
+}
+
 func (p *midnightParser) isClassDeclaration() bool {
 	if p.cur.Type != midnightWord || !p.is("class") {
 		return false
@@ -57,6 +74,7 @@ func (p *midnightParser) classDeclaration(scope string) []ast.Stmt {
 		p.declare(name, scope)
 		stmts = append(stmts, midnightLocal([]string{name}, []ast.Expr{emptyTable()}, line))
 	case "":
+		p.checkAssignable(name, false, line) // (a bare `class X` assigns X)
 		scope = p.lookup(name)
 		stmts = append(stmts, midnightAssign(p.target(name, scope, line), emptyTable(), line))
 	default:

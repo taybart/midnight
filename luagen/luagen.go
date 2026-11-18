@@ -4,7 +4,8 @@
 // The generated code targets Lua 5.1+ and LuaJIT, except that `goto` (also
 // used by Midnight's `continue`) requires Lua 5.2+ or LuaJIT, and Midnight bit
 // operators require a `bit32` library (builtin in Lua 5.2, otherwise a
-// polyfill).
+// polyfill). Code that uses `table.freeze` / `table.isfrozen` (ex. a `const`
+// table) gets a polyfill for them (see freezePolyfill).
 //
 // Statements are placed on the same line as in the original source (where
 // possible), so that line numbers in Lua errors match the original source.
@@ -36,8 +37,38 @@ func generate(chunk []ast.Stmt, comments map[int]string) string {
 	g := &generator{line: 1, fresh: true, scopes: []map[string]bool{{}}, comments: comments}
 	g.stmts(chunk)
 	g.write("\n")
+	if g.usesFreeze {
+		// (on the first line, so line numbers still match the source)
+		return freezePolyfill + " " + string(g.buf)
+	}
 	return string(g.buf)
 }
+
+// freezePolyfill defines table.freeze / table.isfrozen when the runtime
+// doesn't (midnight's does). Plain Lua can't stop assignments to keys a table
+// already has, so freezing moves the table's contents to a hidden table, and
+// the (now empty) table reads from it and errors on writes. Limits, vs
+// midnight's runtime:
+//
+//   - On Lua 5.1 / LuaJIT, `pairs(t)` and `#t` see an empty table (they don't
+//     have __pairs, or __len for tables). Indexing works everywhere.
+//   - rawset (and table.insert / table.remove before Lua 5.3) write to the
+//     empty table instead of erroring.
+//   - A table w/ a metatable can't be frozen.
+const freezePolyfill = `if not table.freeze then ` +
+	`local frozen = setmetatable({}, { __mode = 'k' }) ` +
+	`local function readonly() error('attempt to modify a read-only table', 2) end ` +
+	`function table.freeze(t) ` +
+	`if type(t) ~= 'table' then error("bad argument #1 to 'freeze' (table expected, got " .. type(t) .. ')', 2) end ` +
+	`if frozen[t] then return t end ` +
+	`if getmetatable(t) ~= nil then error("can't freeze a table w/ a metatable (outside of midnight's runtime)", 2) end ` +
+	`local data = {} for k, v in pairs(t) do data[k] = v end for k in pairs(data) do t[k] = nil end ` +
+	`frozen[t] = true ` +
+	`return setmetatable(t, { __index = data, __newindex = readonly, __len = function() return #data end, ` +
+	`__pairs = function() return next, data, nil end, __ipairs = function() return ipairs(data) end, __metatable = false }) ` +
+	`end ` +
+	`function table.isfrozen(t) return frozen[t] == true end ` +
+	`end`
 
 type generator struct {
 	buf []byte
@@ -57,6 +88,9 @@ type generator struct {
 	comments map[int]string
 
 	tmpCounter int
+
+	// Whether the code uses table.freeze / table.isfrozen (see freezePolyfill).
+	usesFreeze bool
 }
 
 /* Output helpers {{{ */
@@ -533,6 +567,9 @@ func (g *generator) expr(expr ast.Expr, minPrec int) {
 	case *ast.IdentExpr:
 		g.name(ex.Value)
 	case *ast.AttrGetExpr:
+		if isFreezeLib(ex) && !g.isLocal("table") {
+			g.usesFreeze = true
+		}
 		g.prefixExpr(ex.Object)
 		g.index(ex.Key)
 	case *ast.TableExpr:
@@ -852,3 +889,10 @@ func assignsName(stmts []ast.Stmt, name string) bool {
 }
 
 /* }}} */
+
+// isFreezeLib checks for `table.freeze` / `table.isfrozen`.
+func isFreezeLib(ex *ast.AttrGetExpr) bool {
+	obj, ok := ex.Object.(*ast.IdentExpr)
+	key, isString := ex.Key.(*ast.StringExpr)
+	return ok && isString && obj.Value == "table" && (key.Value == "freeze" || key.Value == "isfrozen")
+}

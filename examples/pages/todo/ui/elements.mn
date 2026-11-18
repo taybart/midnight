@@ -1,0 +1,10 @@
+-- The page's custom elements: components for the elements in elements.js
+-- (by its exported names), with their tags. A page that uses any of them loads
+-- elements.js once (a module script in its <head>), which registers them.
+-- './' is the page's url: elements.js is served next to it.
+local { elements } = require('midnight.markup')
+
+return elements('./elements.js', {
+  TodoList = 'todo-list',
+  ThemeToggle = 'theme-toggle',
+})

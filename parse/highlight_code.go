@@ -12,7 +12,7 @@ import "strings"
 // `tok-keyword` CSS classes.
 const (
 	ClassPlain    = ""         // whitespace, names, markup text, ...
-	ClassKeyword  = "keyword"  // local, if, return (and `match`, `class`, ... where they're keywords)
+	ClassKeyword  = "keyword"  // local, if, return (and `match`, `class`, `const`, ... where they're keywords)
 	ClassConst    = "const"    // true, false, nil
 	ClassNumber   = "number"   //
 	ClassString   = "string"   // a string literal, delimiters included
@@ -111,6 +111,8 @@ func highlightMidnight(text string) []CodeSpan {
 				class = ClassKeyword // (only a keyword before its handler, see isCatch)
 			case (word == "class" || word == "static" || word == "goto") && nextKind == HlWord && !newline:
 				class = ClassKeyword // (contextual: only before a name, see isClassDeclaration)
+			case word == "const" && !newline && (nextKind == HlWord || nextText == "{" || nextText == "["):
+				class = ClassKeyword // (contextual: only before what it declares, see isConstDeclaration)
 			case nextKind == HlSymbol && nextText == "(":
 				class = ClassFunction
 			}
