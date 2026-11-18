@@ -58,7 +58,7 @@ func TestFilePage(t *testing.T) {
 	if ct := res.Header.Get("Content-Type"); ct != pages.HTMLContentType {
 		t.Errorf("content type %q", ct)
 	}
-	// the client config has the state in its headers: { 'X-Rest-State': '<id>' }
+	// the client config has the state in its headers: { 'X-Midnight-State': '<id>' }
 	state := regexp.MustCompile(`["']` + pages.StateHeader + `["']:\s*["']([^"']+)`).FindStringSubmatch(html)
 	ids := actionID.FindStringSubmatch(html)
 	if state == nil || ids == nil {

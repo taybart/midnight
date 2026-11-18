@@ -6,10 +6,9 @@ fiber, chi, ...). A page renders on `GET`, its actions (functions in `on*`
 attributes) run on the server, and only the components that changed are sent
 back. See [MARKUP.md](MARKUP.md) for the markup syntax and runtime.
 
-Page scripts get midnight's stdlib. [rest](https://github.com/taybart/rest)
-serves the same `.mn` files with its `page` handlers, and its `restpages`
-package adds rest's lua (json, jwt, `rest.request`, ...) to an engine, see
-[hooks](#hooks).
+Page scripts get midnight's stdlib, and what the app adds (see
+[hooks](#hooks)). [rest](https://github.com/taybart/rest) serves the same
+`.mn` files with its `page` handlers.
 
 ```go
 import "github.com/taybart/midnight/pages"
@@ -88,7 +87,7 @@ app.All("/app", adaptor.HTTPHandler(h))            // fiber (github.com/gofiber/
 - Errors in a page's scripts are a `500` (the error isn't sent, it can have
   source in it), and are passed to `Options.OnError` (logged by default).
 - Each interactive page load gets its own lua state, kept for its actions
-  (its id is in the client's `X-Rest-State` header). Unused states are
+  (its id is in the client's `X-Midnight-State` header). Unused states are
   closed after `StateTTL`, or the least recently used once there are
   `MaxStates`, and a `410` for a closed one makes the page reload. Pages without actions are
   static: no client script, and no state is kept.

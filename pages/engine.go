@@ -42,8 +42,7 @@ type Options struct {
 	BeforeRequest func(l *lua.LState, r *http.Request) error
 	// Setup is called once for each new page state (on the page load, after
 	// BeforeRequest, before the page's Setup options), ex. to add modules or
-	// globals. restpages.Apply sets both hooks, so pages get rest's lua
-	// stdlib and the `rest` global.
+	// globals.
 	Setup func(l *lua.LState, r *http.Request) error
 	// OnError is called with errors from page scripts (the response is a 500).
 	// The default logs them.

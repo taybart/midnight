@@ -21,7 +21,7 @@ import (
 // request for a closed (or unknown) state gets ErrStateGone (a 410).
 
 const (
-	StateHeader      = "X-Rest-State"
+	StateHeader      = "X-Midnight-State"
 	DefaultMaxStates = 1000
 	DefaultStateTTL  = 30 * time.Minute
 )
