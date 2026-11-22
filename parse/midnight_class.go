@@ -65,20 +65,22 @@ func (p *midnightParser) classDeclaration(scope string) []ast.Stmt {
 	line := p.cur.Line
 	p.consume() // class
 	name := p.name()
+	nameTok := p.lastName
 
 	stmts := []ast.Stmt{}
 	emptyTable := func() ast.Expr { return midnightLine(&ast.TableExpr{Fields: []*ast.Field{}}, line) }
 
 	switch scope {
 	case midnightScopeLocal:
-		p.declare(name, scope)
+		p.declareAt(name, scope, nameTok)
 		stmts = append(stmts, midnightLocal([]string{name}, []ast.Expr{emptyTable()}, line))
 	case "":
 		p.checkAssignable(name, false, line) // (a bare `class X` assigns X)
+		p.ref(name, nameTok, 0)
 		scope = p.lookup(name)
 		stmts = append(stmts, midnightAssign(p.target(name, scope, line), emptyTable(), line))
 	default:
-		p.declare(name, scope)
+		p.declareAt(name, scope, nameTok)
 		stmts = append(stmts, midnightAssign(p.target(name, scope, line), emptyTable(), line))
 	}
 
@@ -88,6 +90,7 @@ func (p *midnightParser) classDeclaration(scope string) []ast.Stmt {
 	var parent func(line int) ast.Expr
 	if p.branch(":") {
 		parts := []string{p.name()}
+		p.ref(parts[0], p.lastName, 0)
 		for p.branch(".") {
 			parts = append(parts, p.name())
 		}

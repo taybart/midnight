@@ -48,6 +48,7 @@ func TestFormatStyle(t *testing.T) {
 		{"local x=1+2*3", "local x = 1 + 2 * 3"},
 		{"x+=1\nx ..= 'a'\nx ~= 1", "x += 1\nx ..= 'a'\nx ~= 1"},
 		{"local y = -x + - 1\nlocal z = a - -b\nreturn !x, #t, ~y", "local y = -x + -1\nlocal z = a - -b\nreturn !x, #t, ~y"},
+		{"local y = - -x\nlocal z = - - -1", "local y = - -x\nlocal z = - - -1"}, // not `--` (a comment)
 		{"f( a,b )\nx = t [ 1 ]\nlocal [ a ] = t", "f(a, b)\nx = t[1]\nlocal [a] = t"},
 		{"local t = {a=1,b={}}", "local t = { a = 1, b = {} }"},
 		{"local f = (a,...rest)->a\nlocal g = x=>x", "local f = (a, ...rest) -> a\nlocal g = x => x"},

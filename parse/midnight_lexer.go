@@ -38,6 +38,9 @@ type midnightToken struct {
 	Type  midnightTokenType
 	Value string // decoded value for midnightStringContent
 	Line  int
+	// Byte offset just past the token in the source. For words and markup
+	// names, the token starts at End-len(Value) (see Symbols).
+	End int
 }
 
 var midnightSymbols = map[string]bool{
@@ -111,7 +114,7 @@ func (lx *midnightLexer) peek(n int) byte {
 func (lx *midnightLexer) eof() bool { return lx.pos >= len(lx.text) }
 
 func (lx *midnightLexer) emit(typ midnightTokenType, value string, line int) {
-	lx.tokens = append(lx.tokens, midnightToken{Type: typ, Value: value, Line: line})
+	lx.tokens = append(lx.tokens, midnightToken{Type: typ, Value: value, Line: line, End: lx.pos})
 }
 
 func isMidnightWordHead(c byte) bool {

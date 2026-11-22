@@ -15,7 +15,7 @@ import (
 )
 
 // lintIgnoreComment suppresses diagnostics on the line it appears on.
-const lintIgnoreComment = "midnight-lint: ignore"
+const lintIgnoreComment = lint.IgnoreComment
 
 const lintUsage = `Usage: midnight lint [options] [paths]
 Checks Midnight files (or all *.mn and *.midnight files under directories) for likely mistakes.

@@ -33,6 +33,10 @@ const (
 	RuleSnakeCase = "snake-case"
 )
 
+// IgnoreComment, in a comment, suppresses diagnostics on its line (checked by
+// the callers of Check, which have the source).
+const IgnoreComment = "midnight-lint: ignore"
+
 type Diagnostic struct {
 	Line    int
 	Rule    string

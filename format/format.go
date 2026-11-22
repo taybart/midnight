@@ -538,6 +538,8 @@ func spaceBetween(a, b, beforeA *token) bool {
 		return b.spaced // method calls vs `{ a: b }` destructures, labels
 	case assignmentOperators[a.Text] && a.Kind == parse.RawSymbol && is(b, "=") && !b.spaced && !b.synthetic:
 		return false // compound assignment (ex. `+=`)
+	case is(a, "-") && strings.HasPrefix(b.Text, "-"):
+		return true // `- -x`, `--x` would be a comment
 	case isUnary(a, beforeA):
 		return false
 	case isBinaryOperator(a), isBinaryOperator(b):

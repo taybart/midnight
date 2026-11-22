@@ -36,6 +36,10 @@ type MidnightOptions struct {
 	// lowered to. By default, it's `h` if declared, otherwise the runtime
 	// library's `h` (imported automatically).
 	MarkupFactory string
+
+	// Symbols, when set, collects the file's declarations and references (see
+	// Symbols). It's filled in even when parsing fails, up to the error.
+	Symbols *Symbols
 }
 
 // SetMarkupFactory validates and sets MarkupFactory (ex. from a command line

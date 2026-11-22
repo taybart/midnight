@@ -224,7 +224,7 @@ func (p *midnightParser) catchBody(c *midnightCatch, isExpression bool) {
 
 	if !p.is("{") {
 		c.name = p.name()
-		p.declare(c.name, midnightScopeLocal)
+		p.declareAt(c.name, midnightScopeLocal, p.lastName)
 	}
 
 	bodyLine := p.cur.Line

@@ -48,7 +48,7 @@ const (
 	// what a run can print, so a runaway loop can't flood the page
 	maxOutput = 1 << 20
 	// a line w/ this isn't linted (as cmd/midnight)
-	lintIgnoreComment = "midnight-lint: ignore"
+	lintIgnoreComment = lint.IgnoreComment
 )
 
 // page is the state of the last run, while its page is interactive.

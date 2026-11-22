@@ -31,6 +31,10 @@ func mainAux() int {
 			return lintCommand(os.Args[2:])
 		case "fmt":
 			return fmtCommand(os.Args[2:])
+		case "convert":
+			return convertCommand(os.Args[2:])
+		case "lsp":
+			return lspCommand(os.Args[2:])
 		}
 	}
 
@@ -55,6 +59,8 @@ func mainAux() int {
        midnight clean [paths]              (see 'midnight clean -h')
        midnight lint [options] [paths]     (see 'midnight lint -h')
        midnight fmt [options] [paths]      (see 'midnight fmt -h')
+       midnight convert [options] paths    (see 'midnight convert -h')
+       midnight lsp                        language server, on stdio
 Available options are:
   -e stat  execute string 'stat'
   -lang l  source language, 'midnight' or 'lua' (default: 'lua' for *.lua

@@ -35,6 +35,7 @@ Compared to upstream gopher-lua:
 | | `midnight_cache.go` | compiled file cache (shared bytecode, keyed by path, mtime, size, and options) |
 | | `bit32lib.go` | Lua 5.2's `bit32` (gopher-lua is Lua 5.1, which has no bit operators) |
 | | `luagen/` | AST -> Lua source (optional, see [strategy B](#b-source-to-source)) |
+| | `mngen/` | Lua source -> Midnight source (`midnight convert`, optional) |
 | | `cmd/midnight/` | CLI (from gopher-lua's `glua`), plus `compile` / `clean` / `lint` / `fmt` (see [TOOLS.md](TOOLS.md)) |
 | | `lint/`, `format/` | linter (on the AST) and formatter (on raw tokens, from `parse.MidnightRawTokens`) |
 | | `midnight_spec_test.go`, `testdata/midnight-spec/`, `_tools/midnight-spec/` | differential tests against the reference compiler |

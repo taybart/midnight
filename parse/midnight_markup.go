@@ -488,6 +488,7 @@ func (p *midnightParser) markupRuntimeImport() ast.Stmt {
 func (p *midnightParser) markupTag(name string, line int) ast.Expr {
 	if strings.Contains(name, ".") {
 		parts := strings.Split(name, ".")
+		p.ref(parts[0], p.index-1, len(parts[0]))
 		expr := p.resolve(parts[0], line)
 		for _, key := range parts[1:] {
 			expr = midnightAttr(expr, midnightString(key, line), line)
@@ -497,6 +498,7 @@ func (p *midnightParser) markupTag(name string, line int) ast.Expr {
 	if c := name[0]; 'a' <= c && c <= 'z' || strings.ContainsAny(name, "-:") {
 		return midnightString(name, line)
 	}
+	p.ref(name, p.index-1, 0)
 	return p.resolve(name, line)
 }
 
