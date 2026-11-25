@@ -14,14 +14,14 @@ import (
 // verify checks that Midnight source parses to the same program as a Lua
 // chunk. If not, it returns the line of the first Lua statement that differs.
 // (lua is normalized in place, it's not used after.)
-func verify(lua []ast.Stmt, midnight []byte) (int, bool) {
+func verify(lua []ast.Stmt, midnight []byte, opts Options) (int, bool) {
 	converted, err := parse.ParseMidnight(bytes.NewReader(midnight), "<convert>")
 	if err != nil {
 		return errorLine(err), false
 	}
 
-	normalize(reflect.ValueOf(lua))
-	normalize(reflect.ValueOf(converted))
+	normalize(reflect.ValueOf(lua), opts)
+	normalize(reflect.ValueOf(converted), opts)
 
 	for i, stmt := range lua {
 		if i >= len(converted) || parse.Dump([]ast.Stmt{stmt}) != parse.Dump([]ast.Stmt{converted[i]}) {
@@ -37,19 +37,19 @@ func verify(lua []ast.Stmt, midnight []byte) (int, bool) {
 // normalize rewrites the parts of a chunk that differ between the Lua and
 // Midnight parsers w/o changing the program: number literals (`0x10` vs
 // `16`), and the grouping of `..` chains (see the package docs).
-func normalize(v reflect.Value) {
+func normalize(v reflect.Value, opts Options) {
 	switch v.Kind() {
 	case reflect.Pointer:
 		if !v.IsNil() {
-			normalize(v.Elem())
+			normalize(v.Elem(), opts)
 		}
 	case reflect.Interface:
 		if v.IsNil() {
 			return
 		}
-		normalize(v.Elem())
+		normalize(v.Elem(), opts)
 		if expr, ok := v.Interface().(*ast.StringConcatOpExpr); ok && v.CanSet() {
-			v.Set(reflect.ValueOf(rightConcat(expr)))
+			v.Set(reflect.ValueOf(rightConcat(expr, opts)))
 		}
 	case reflect.Struct:
 		if n, ok := v.Addr().Interface().(*ast.NumberExpr); ok {
@@ -58,18 +58,19 @@ func normalize(v reflect.Value) {
 		}
 		for i := 0; i < v.NumField(); i++ {
 			if v.Type().Field(i).IsExported() {
-				normalize(v.Field(i))
+				normalize(v.Field(i), opts)
 			}
 		}
 	case reflect.Slice:
 		for i := 0; i < v.Len(); i++ {
-			normalize(v.Index(i))
+			normalize(v.Index(i), opts)
 		}
 	}
 }
 
 // rightConcat regroups a `..` chain to the right, like Lua: a .. (b .. c).
-func rightConcat(expr *ast.StringConcatOpExpr) ast.Expr {
+// W/ Options.Interp, the operands are normalized too (see interpOperands).
+func rightConcat(expr *ast.StringConcatOpExpr, opts Options) ast.Expr {
 	var operands []ast.Expr
 	var flatten func(ast.Expr)
 	flatten = func(e ast.Expr) {
@@ -81,6 +82,9 @@ func rightConcat(expr *ast.StringConcatOpExpr) ast.Expr {
 		}
 	}
 	flatten(expr)
+	if opts.Interp {
+		operands = interpOperands(operands)
+	}
 
 	result := operands[len(operands)-1]
 	for i := len(operands) - 2; i >= 0; i-- {

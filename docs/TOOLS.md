@@ -224,7 +224,7 @@ reported. Files that don't parse are reported and left unchanged.
 ## convert
 
 ```sh
-midnight convert [-f] [-p] paths | -
+midnight convert [-f] [-p] [-interp] paths | -
 ```
 
 Converts `foo.lua` to `foo.mn` next to it (or stdin to stdout w/ `-`), for
@@ -242,6 +242,13 @@ result is formatted (see [fmt](#fmt)). Strings are adjusted where Midnight
 reads them differently: `{` in a double quoted or block string starts an
 interpolation, so it's escaped (or the string single quoted).
 
+`-interp` opts into one rewrite: `..` chains w/ a string literal become
+interpolations, `'id: ' .. id .. '!'` -> `"id: {id}!"` (and `tostring(x)` in
+a chain becomes just `{x}`). It's opt-in because it isn't exact: an
+interpolation calls `tostring`, so a nil, boolean or table (w/o `__concat`)
+that `..` would raise an error on becomes text instead, and `__concat`
+metamethods aren't called. Chains that span lines are kept as `..`.
+
 A file that uses something w/o an exact Midnight equivalent isn't converted.
 Instead, every problem in it is listed (`path:line: message`), ex.:
 
@@ -255,7 +262,8 @@ Instead, every problem in it is listed (`path:line: message`), ex.:
 Every result is checked to parse to the same program as the Lua. The only
 difference allowed is the grouping of `..` chains: Lua groups `a .. b .. c` as
 `a .. (b .. c)`, and Midnight as `(a .. b) .. c`, which gives the same result
-unless a `__concat` metamethod depends on the order. If the check fails (a
+unless a `__concat` metamethod depends on the order (w/ `-interp`, also
+`tostring(x)` vs `x` in a chain). If the check fails (a
 converter bug), the file isn't converted and the error is reported.
 
 ### Output

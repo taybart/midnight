@@ -2,7 +2,8 @@
 //
 // The conversion is a syntax translation: the output is the same program, w/
 // Midnight syntax (`{ }` blocks, `->` functions, `&&` / `||` / `!` / `!=`),
-// not rewritten to use Midnight features. Comments and line breaks are kept.
+// not rewritten to use Midnight features (except opt-in ones, see Options).
+// Comments and line breaks are kept.
 //
 // Code that has no exact Midnight equivalent isn't converted. Instead, Convert
 // returns an error for each problem, ex. a name that is a Midnight keyword
@@ -52,6 +53,11 @@ func (es Errors) Error() string {
 // errors. The error is an Errors if the Lua uses something that can't be
 // converted, or another error if it doesn't parse.
 func Convert(source []byte, name string) ([]byte, error) {
+	return ConvertWith(source, name, Options{})
+}
+
+// ConvertWith is Convert w/ opt-in conversions (see Options).
+func ConvertWith(source []byte, name string, opts Options) ([]byte, error) {
 	text := strings.ReplaceAll(string(source), "\r\n", "\n")
 
 	// Lua skips a first line starting w/ `#`, Midnight only `#!` (which scan
@@ -73,7 +79,7 @@ func Convert(source []byte, name string) ([]byte, error) {
 		return nil, err
 	}
 
-	g := &generator{source: name, line: 1, fresh: true, sc: scan(text), usedParens: map[int]int{}, usedBraces: map[int]int{}}
+	g := &generator{source: name, opts: opts, line: 1, fresh: true, sc: scan(text), usedParens: map[int]int{}, usedBraces: map[int]int{}}
 	g.stmts(chunk)
 	g.finish()
 
@@ -87,7 +93,7 @@ func Convert(source []byte, name string) ([]byte, error) {
 		return nil, Errors{{Source: name, Line: errorLine(err), Message: "conversion bug, output doesn't parse: " + errorMessage(err)}}
 	}
 
-	if line, ok := verify(chunk, formatted); !ok {
+	if line, ok := verify(chunk, formatted, opts); !ok {
 		return nil, Errors{{Source: name, Line: line, Message: "conversion bug, output parses to a different program"}}
 	}
 
@@ -96,6 +102,7 @@ func Convert(source []byte, name string) ([]byte, error) {
 
 type generator struct {
 	source string
+	opts   Options
 	buf    []byte
 
 	// Current output line (output lines follow the source's).
@@ -589,6 +596,10 @@ func (g *generator) concat(ex *ast.StringConcatOpExpr, minPrec int) {
 	}
 	flatten(ex)
 
+	if g.interp(operands) {
+		return
+	}
+
 	for i, operand := range operands {
 		if i > 0 {
 			g.write(" .. ")
@@ -838,7 +849,11 @@ func quote(s string) string {
 	if strings.Contains(s, "'") && !strings.Contains(s, `"`) {
 		q = '"'
 	}
+	return quoteWith(s, q)
+}
 
+// quoteWith returns s quoted w/ q (' or ").
+func quoteWith(s string, q byte) string {
 	var b bytes.Buffer
 	b.WriteByte(q)
 	for i := 0; i < len(s); i++ {
